@@ -2,16 +2,24 @@
 
 싱글플레이 오토배틀러 로그라이트. 15라운드 동안 유닛·증강체·시너지를 쌓아 사기 조합을 완성하고 최종 보스를 쓸어버린다.
 
-## 실행
+## 플레이
+
+- **브라우저에서 바로**: https://yuangunn.github.io/Overbuild/
+- **설치 없이 내려받아서**: [Releases](https://github.com/yuangunn/Overbuild/releases)에서 `Overbuild-*.zip`을 받아 압축을 풀고 `index.html`을 더블클릭한다. 인터넷 연결이 필요 없다.
+
+최신 Chrome·Edge를 권장한다(macOS Chrome에서 확인). 이모지는 Windows 10 글꼴(Emoji 12)에 있는 것만 쓴다. 화면은 1280×600 이상을 권장한다.
+서버·로그인 없음. 진행 상황은 그 브라우저의 localStorage(`overbuild:*`)에 저장되므로, 컴퓨터·브라우저를 바꾸면 처음부터 시작한다.
+
+## 개발
 
 ```bash
 npm install
 npm run dev      # http://localhost:5173
 npm test         # 헤드리스 검증 (메커니즘 · 사기 빌드 · 봇 300판 완주)
-npm run build    # dist/ 정적 파일
+npm run build    # dist/ — JS·CSS를 index.html에 넣어 file:// 로도 실행된다 (scripts/inline.js)
 ```
 
-서버·로그인 없음. 진행 상황은 브라우저 localStorage(`overbuild:*`)에 저장된다.
+`main`에 푸시하면 `.github/workflows/pages.yml`이 테스트·빌드 후 GitHub Pages에 배포한다.
 
 ## 조작
 

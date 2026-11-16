@@ -215,7 +215,7 @@ export const AUGMENTS: AugDef[] = [
     desc: '전투에서 이길 때마다 배치된 모든 유닛의 공격력·체력이 영구히 +8%.',
   },
   {
-    id: 'midas', name: '황금 손', emoji: '🪙', rarity: 1,
+    id: 'midas', name: '황금 손', emoji: '💰', rarity: 1,
     desc: '즉시 15골드. 매 라운드 수입 +2, 상점 새로고침 1번 무료.',
     onPick: c => c.gold(15),
   },
@@ -254,7 +254,7 @@ export const AUGMENTS: AugDef[] = [
     }),
   },
   {
-    id: 'duplicate', name: '거울 복제', emoji: '🪞', rarity: 2,
+    id: 'duplicate', name: '거울 복제', emoji: '👯', rarity: 2,
     desc: '보유한 가장 비싼 유닛의 ★1 복제본 2개를 즉시 얻는다 (승급에 바로 쓰인다).',
     onPick: c => {
       const t = c.bestUnitTpl()
@@ -339,6 +339,6 @@ export const RESONANCES: ResDef[] = [
   { id: 'res_execution', name: '공개 처형', emoji: '⚰️', pair: ['executioner', 'corpse'], desc: '처형 기준 25%. 처형된 적의 시체 폭발 피해 2배.' },
   { id: 'res_shotgun', name: '산탄 연쇄', emoji: '🎇', pair: ['multishot', 'chain'], desc: '추가 화살 4발, 추가 화살도 치명타가 터진다 (연쇄 치명과 이어짐).' },
   { id: 'res_legend', name: '전설의 영웅', emoji: '👑', pair: ['lonehero', 'growth'], desc: '성장 효과 2배 (+16%), 빈 칸당 보너스 +60%.' },
-  { id: 'res_march', name: '끝없는 행진', emoji: '🪦', pair: ['soulpact', 'martyr'], desc: '원혼도 쓰러지면 원혼을 남긴다 (최대 3세대).' },
+  { id: 'res_march', name: '끝없는 행진', emoji: '👣', pair: ['soulpact', 'martyr'], desc: '원혼도 쓰러지면 원혼을 남긴다 (최대 3세대).' },
   { id: 'res_thunder', name: '뇌신 강림', emoji: '⛈️', pair: ['smite', 'frenzy'], desc: '낙뢰가 5번째 공격마다 떨어진다.' },
 ]

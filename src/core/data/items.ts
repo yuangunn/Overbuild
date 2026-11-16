@@ -23,8 +23,8 @@ const ring: Mod = {
 
 export const ITEMS: ItemDef[] = [
   { id: 'sword', name: '거인의 대검', emoji: '⚔️', desc: '공격력 +40%', apply: f => { f.atk *= 1.4 } },
-  { id: 'feather', name: '바람 깃털', emoji: '🪶', desc: '공격 속도 +35%', apply: f => { f.asBonus += 0.35 } },
-  { id: 'helm', name: '강철 투구', emoji: '🪖', desc: '체력 +45%, 방어력 +20', apply: f => { f.maxHp *= 1.45; f.armor += 20 } },
+  { id: 'feather', name: '바람 깃털', emoji: '🌬️', desc: '공격 속도 +35%', apply: f => { f.asBonus += 0.35 } },
+  { id: 'helm', name: '강철 투구', emoji: '⛑️', desc: '체력 +45%, 방어력 +20', apply: f => { f.maxHp *= 1.45; f.armor += 20 } },
   { id: 'crystal', name: '마나 수정', emoji: '💎', desc: '마나 50%로 시작, 마나 획득 +25%', apply: f => { f.mana += f.maxMana * 0.5; f.manaGain += 0.25 } },
   { id: 'dice', name: '암살자의 주사위', emoji: '🎲', desc: '치명타 확률 +25%, 치명타 피해 +30%', apply: f => { f.crit += 0.25; f.critDmg += 0.3 } },
   { id: 'fang', name: '흡혈 송곳니', emoji: '🦷', desc: '흡혈 30%', apply: f => { f.lifesteal += 0.3 } },

@@ -10,7 +10,7 @@ const E = (o: Omit<UnitTpl, 'cost' | 'traits' | 'skillName' | 'skillDesc'> & Par
 export const ENEMIES: Record<string, UnitTpl> = {
   slime: E({ id: 'slime', name: '슬라임', emoji: '🟢', hp: 420, atk: 34, as: 0.7, range: 1, armor: 5, mana: 0 }),
   goblin: E({ id: 'goblin', name: '고블린', emoji: '👺', hp: 360, atk: 40, as: 0.95, range: 1, armor: 5, mana: 0 }),
-  thrower: E({ id: 'thrower', name: '고블린 투척수', emoji: '🪃', hp: 300, atk: 42, as: 0.7, range: 3, armor: 0, mana: 0 }),
+  thrower: E({ id: 'thrower', name: '고블린 투척수', emoji: '💣', hp: 300, atk: 42, as: 0.7, range: 3, armor: 0, mana: 0 }),
   orc: E({
     id: 'orc', name: '오크 전사', emoji: '👹', hp: 800, atk: 55, as: 0.65, range: 1, armor: 30, mana: 80,
     skillName: '강타', skillDesc: '대상에게 공격력 250% 피해, 1.2초 기절.',
@@ -57,7 +57,7 @@ export const ENEMIES: Record<string, UnitTpl> = {
     },
   }),
   troll: E({
-    id: 'troll', name: '트롤 족장', emoji: '🧌', size: 0.95, hp: 3800, atk: 110, as: 0.7, range: 1, armor: 40, mana: 80,
+    id: 'troll', name: '트롤 족장', emoji: '🦍', size: 0.95, hp: 3800, atk: 110, as: 0.7, range: 1, armor: 40, mana: 80,
     skillName: '대지 분쇄', skillDesc: '주변 적에게 공격력 220% 피해, 1초 기절.',
     skill(b, f) {
       for (const e of b.inRadius(f.x, f.y, 2, foe(f))) { b.damage(f, e, f.atk * 2.2, { kind: 'skill' }); e.stunT = Math.max(e.stunT, 1) }

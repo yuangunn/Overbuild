@@ -10,6 +10,7 @@ import * as R from '../core/run.ts'
 import * as M from '../core/meta.ts'
 import { playBattle, fmt, type Player } from './arena.ts'
 import { sprHTML, CREDITS } from './sprites.ts'
+import { version } from '../../package.json'
 
 type Screen = 'title' | 'run' | 'meta' | 'codex'
 
@@ -58,7 +59,7 @@ function titleScreen() {
       <div><b>👑 15라운드</b>5·10 정예, 15 최종 보스.<br>생명 ${3 + (meta.unlocked.includes('life') ? 1 : 0)}개, 져도 계속 갑니다.</div>
     </div>
     <p class="dim">최고 ${meta.best}라운드 · 클리어 ${meta.wins}회 · 원정 ${meta.runs}회</p>
-    <p class="credits">${CREDITS}</p>
+    <p class="credits">v${version} · ${CREDITS}</p>
   </div>`
 }
 
@@ -101,7 +102,7 @@ function runScreen(s: R.RunState) {
       <div class="pill">라운드 <b>${s.round}</b>/${R.MAX_ROUND}</div>
       <div class="pill wave ${s.wave.kind}">${s.wave.kind === 'normal' ? '⚔️' : s.wave.kind === 'elite' ? '💀' : '👑'} ${s.wave.label}</div>
       <div class="pill lives" title="생명">${'❤️'.repeat(Math.max(0, s.lives))}${'🖤'.repeat(Math.max(0, s.maxLives - s.lives))}</div>
-      <div class="pill gold">🪙 <b>${s.gold}</b></div>
+      <div class="pill gold">💰 <b>${s.gold}</b></div>
       <div class="pill ${board.length < slots ? 'warn' : ''}">👥 ${board.length}/${slots}</div>
       <div class="sp"></div>
       <button class="ghost" data-act="title" ${battle ? 'disabled' : ''}>메뉴</button>
@@ -138,7 +139,7 @@ function runScreen(s: R.RunState) {
       <div class="shop" data-drop="sell">
         <div class="lbl">상점 ${selU ? `<button class="sell" data-act="sell">💰 ${UNIT[selU.tpl].name} 판매 +${R.sellValue(selU)}</button>` : '<span class="dim small">유닛을 여기로 끌어오면 판매</span>'}</div>
         <div class="cards">${s.shop.map((id, i) => shopCard(s, id, i)).join('')}
-          <button class="reroll" data-act="reroll" ${s.gold < 1 && !s.freeRerolls ? 'disabled' : ''}>🔄<span>${s.freeRerolls ? '무료' : '1🪙'}</span><kbd>D</kbd></button>
+          <button class="reroll" data-act="reroll" ${s.gold < 1 && !s.freeRerolls ? 'disabled' : ''}>🔄<span>${s.freeRerolls ? '무료' : '1💰'}</span><kbd>D</kbd></button>
         </div>
       </div>
     </footer>
@@ -180,7 +181,7 @@ function shopCard(s: R.RunState, id: string | null, i: number) {
   return `<div class="card c${t.cost} ${s.gold < t.cost ? 'poor' : ''} ${own >= 2 ? 'merge' : ''}" data-act="buy" data-i="${i}" data-tip="t:${id}">
     <div class="cardspr">${sprHTML(t.id, t.emoji, '', 0)}</div><div class="nm">${t.name}</div>
     <div class="tr">${t.traits.map(x => `<span style="color:${TRAITS[x].color}">${TRAITS[x].emoji}${TRAITS[x].name}</span>`).join(' ')}</div>
-    <div class="cost">🪙${t.cost}</div>${own ? `<div class="own">${own >= 2 ? '★2 승급!' : `${own}/3`}</div>` : ''}
+    <div class="cost">💰${t.cost}</div>${own ? `<div class="own">${own >= 2 ? '★2 승급!' : `${own}/3`}</div>` : ''}
   </div>`
 }
 
@@ -602,5 +603,9 @@ addEventListener('keydown', e => {
   } else if (e.code === 'KeyD' && !modal(run)) act('reroll')
   else if (e.code === 'Escape') { sel = {}; render() }
 })
+
+// 다른 컴퓨터에서 터진 오류를 화면에 남겨 제보할 수 있게 한다
+addEventListener('error', e => toast(`⚠️ 오류 (v${version}): ${e.message}`, true))
+addEventListener('unhandledrejection', e => toast(`⚠️ 오류 (v${version}): ${e.reason}`, true))
 
 render()
