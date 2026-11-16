@@ -1,0 +1,272 @@
+:root {
+  --bg: #0a0e16; --panel: #121825; --panel2: #192133; --line: #273149; --text: #e8edf7; --dim: #8b97ae;
+  --acc: #4fd1ff; --gold: #ffcc4d; --red: #ff5d6c; --green: #4ade80;
+  --c1: #9aa4b5; --c2: #3ecf8e; --c3: #5aa9ff;
+  --emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
+* { box-sizing: border-box }
+html, body { margin: 0; height: 100%; overflow: hidden; user-select: none;
+  background: radial-gradient(1400px 700px at 50% -15%, #1b2645 0%, var(--bg) 60%) fixed var(--bg);
+  color: var(--text); font: 14px/1.45 Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif }
+#app { height: 100vh }
+button { font: inherit; color: inherit; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; cursor: pointer; transition: transform .12s, border-color .12s, background .12s }
+button:hover:not(:disabled) { border-color: var(--acc); transform: translateY(-1px) }
+button:disabled { opacity: .4; cursor: default }
+button.primary { background: linear-gradient(180deg, #4dcbff, #1f8fe0); border-color: #7fdcff; color: #04121f; font-weight: 800 }
+button.big { font-size: 18px; padding: 12px 26px; border-radius: 14px }
+button.ghost { background: transparent }
+kbd { font: 11px ui-monospace, monospace; opacity: .65; border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; margin-left: 6px }
+.dim { color: var(--dim) } .small { font-size: 12px } .gold { color: var(--gold) } .good { color: var(--green) }
+.row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap }
+.chip { display: inline-block; padding: 1px 8px; margin: 2px 2px 0 0; border-radius: 999px; font-size: 12px; background: color-mix(in srgb, var(--c, #8b97ae) 18%, transparent); color: var(--c, var(--text)); border: 1px solid color-mix(in srgb, var(--c, #8b97ae) 40%, transparent) }
+.pill { padding: 5px 12px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--line); white-space: nowrap }
+.pill.gold { color: var(--gold) } .pill.warn { border-color: #ffb347; color: #ffcf8a }
+.pill.wave.elite { border-color: #c77dff; color: #e0b3ff } .pill.wave.boss { border-color: var(--red); color: #ffb3bb; animation: pulse 1.4s infinite }
+
+/* 타이틀 */
+.title-screen { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; text-align: center; padding: 16px }
+.logo { font: 900 clamp(48px, 9vw, 112px)/1 system-ui, sans-serif; letter-spacing: -2px; background: linear-gradient(180deg, #fff, #8fb8ff); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 6px 30px #4fd1ff55) }
+.logo b { background: linear-gradient(180deg, #ffe680, #ff7a45); -webkit-background-clip: text; background-clip: text; color: transparent; margin-left: .15em }
+.tag { font-size: 18px; color: #c5d2ea; margin: -8px 0 6px }
+.menu { display: flex; flex-direction: column; gap: 12px; align-items: center }
+.menu .big { min-width: 280px }
+.howto { display: grid; grid-template-columns: repeat(3, minmax(0, 240px)); gap: 12px; margin-top: 10px }
+.howto div { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; text-align: left; color: #c5d2ea; font-size: 13px }
+.howto b { display: block; color: var(--text); font-size: 15px; margin-bottom: 4px } .howto em { color: var(--gold); font-style: normal }
+
+/* 메타·도감 */
+.page { max-width: 980px; margin: 0 auto; padding: 24px 16px; height: 100%; overflow: auto }
+.page-head { display: flex; align-items: center; gap: 16px } .page-head h2 { flex: 1; margin: 0 }
+.unlocks { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 16px }
+.unlock { display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px }
+.unlock .em { font: 30px var(--emoji) } .unlock .body { flex: 1; display: flex; flex-direction: column; font-size: 13px }
+.unlock.own { border-color: #3ecf8e66 } .unlock .done { color: var(--green); font-size: 13px }
+.codex { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; margin-top: 16px }
+.res-card { background: var(--panel); border: 1px dashed var(--line); border-radius: 14px; padding: 14px; opacity: .75 }
+.res-card.found { border: 1px solid var(--gold); opacity: 1; box-shadow: 0 0 24px #ffcc4d22 }
+.res-card .pair { display: flex; gap: 6px; align-items: center; font-size: 13px } .res-card .pair i { color: var(--dim); font-style: normal }
+.res-card .res-name { font-size: 18px; font-weight: 800; margin: 8px 0 2px } .res-card p { margin: 0; color: #c5d2ea; font-size: 13px }
+
+/* 런 화면 */
+.run { height: 100vh; display: grid; grid-template-rows: auto 1fr auto }
+.top { display: flex; align-items: center; gap: 10px; padding: 8px 16px; background: #0e1320cc; border-bottom: 1px solid var(--line) }
+.brand { font-weight: 900; letter-spacing: -.5px; margin-right: 6px } .brand b { color: #ffb347; margin-left: 3px }
+.sp { flex: 1 }
+.mid { display: grid; grid-template-columns: 220px minmax(0, 1fr) 250px; gap: 12px; padding: 12px 16px; min-height: 0 }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; overflow: auto }
+.panel h3 { margin: 6px 0 8px; font-size: 13px; color: var(--dim); font-weight: 700; letter-spacing: .5px }
+.syn { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto auto; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 10px; margin-bottom: 4px; background: var(--panel2); border: 1px solid transparent; opacity: .6; cursor: help }
+.syn.t1, .syn.t2 { opacity: 1; border-color: color-mix(in srgb, var(--c) 55%, transparent); background: color-mix(in srgb, var(--c) 14%, var(--panel2)) }
+.syn.t2 { box-shadow: 0 0 16px color-mix(in srgb, var(--c) 35%, transparent) }
+.syn .ico { font-family: var(--emoji) } .syn .nm { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis } .syn b { text-align: right; white-space: nowrap }
+.syn .steps i { font-style: normal; font-size: 11px; padding: 0 5px; border-radius: 6px; color: var(--dim); border: 1px solid var(--line); margin-left: 2px }
+.syn .steps i.on { color: #08101c; background: var(--c); border-color: var(--c) }
+.aug-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; background: var(--panel2); margin-bottom: 4px; border-left: 3px solid #b8c4d6; cursor: help; font-size: 13px }
+.aug-row span { font-family: var(--emoji); font-size: 18px }
+.aug-row.r2 { border-left-color: var(--gold) } .aug-row.r3 { border-left-color: #ff7ad9 } .aug-row.res { border-left-color: #7afcff; background: linear-gradient(90deg, #7afcff22, var(--panel2)) }
+.items { display: flex; flex-wrap: wrap; gap: 6px }
+.item { touch-action: none; width: 40px; height: 40px; display: grid; place-items: center; font: 22px var(--emoji); background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; cursor: grab }
+.item.sel { border-color: #fff; box-shadow: 0 0 0 2px #fff }
+
+.center { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-width: 0; min-height: 0 }
+.arena { position: relative; width: min(100%, calc((100vh - 350px) * 2.25)); aspect-ratio: 9 / 4; border-radius: 16px; container-type: inline-size;
+  background: linear-gradient(180deg, #121a2a, #0c111c); border: 1px solid var(--line); box-shadow: inset 0 0 80px #000a, 0 10px 40px #0008; overflow: hidden }
+.arena canvas { position: absolute; inset: 0; width: 100%; height: 100% }
+.zone { position: absolute; top: 0; bottom: 0; width: 33.4%; pointer-events: none }
+.zone.mine { left: 2.2%; background: linear-gradient(90deg, #4fd1ff10, #4fd1ff06); border-right: 1px solid #4fd1ff22 }
+.zone.foe { right: 2.2%; background: linear-gradient(270deg, #ff5d6c10, #ff5d6c06); border-left: 1px solid #ff5d6c22 }
+.cell { position: absolute; display: grid; place-items: center }
+.cell[data-drop] { border: 1px dashed #4fd1ff22; border-radius: 12px; transform: scale(.94) }
+.drag-unit .cell[data-drop] { border-color: #4fd1ff88; background: #4fd1ff0d }
+.drag-unit .shop { outline: 2px dashed #ffcc4d88; outline-offset: -4px }
+.drag-unit .bench { outline: 2px dashed #4fd1ff66; outline-offset: -4px }
+.drag-item .tok:not(.enemy) { box-shadow: 0 0 0 3px #ffcc4d88 }
+
+.tok { touch-action: none; position: relative; width: 82%; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; cursor: grab;
+  background: radial-gradient(circle at 35% 30%, #24344e, #101826); border: 3px solid var(--c1); font-size: calc(100cqw / 9 * .4); transition: transform .12s }
+.tok:hover { transform: scale(1.06) }
+.tok .em { font-family: var(--emoji); line-height: 1 }
+.tok.c2 { border-color: var(--c2) } .tok.c3 { border-color: var(--c3) }
+.tok.s2 { box-shadow: 0 0 0 2px #dfe7f2aa, 0 0 14px #dfe7f255 } .tok.s3 { box-shadow: 0 0 0 2px var(--gold), 0 0 22px #ffcc4d88 }
+.tok .st { position: absolute; top: -.55em; font-size: max(11px, .3em); color: var(--gold); text-shadow: 0 1px 2px #000; letter-spacing: -1px }
+.tok.s1 .st { color: #d49a6a }
+.tok .its { position: absolute; bottom: -.5em; font: max(11px, .28em) var(--emoji); background: #0b1018dd; border-radius: 8px; padding: 0 3px }
+.tok.sel { outline: 3px solid #fff; outline-offset: 3px; animation: bob 1s infinite }
+.tok.enemy { border-color: var(--red); background: radial-gradient(circle at 35% 30%, #4a2330, #1d1016); cursor: help }
+.tok.enemy.elite { transform: scale(1.18); border-color: #c77dff } .tok.enemy.boss { transform: scale(1.45); border-color: var(--gold); box-shadow: 0 0 30px #ff5d6c88 }
+
+.hud { height: 26px; display: flex; align-items: center; gap: 16px; font-weight: 700; font-size: 13px }
+.hud .hot { color: var(--red) }
+.bossbar { position: relative; width: 320px; height: 20px; background: #0b1018; border: 1px solid #ff4d6d88; border-radius: 6px; overflow: hidden }
+.bossbar i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #ff4d6d, #ff8a5c) }
+.bossbar em { position: relative; display: block; text-align: center; font: 700 12px/20px sans-serif; text-shadow: 0 1px 2px #000 }
+.ctrl { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: center; min-height: 52px }
+.speed { display: flex; gap: 4px } .speed button { padding: 6px 10px } .speed button.on { border-color: var(--acc); color: var(--acc) }
+.fight { animation: glow 2s infinite }
+.ctrl .hint { min-width: 260px }
+
+.bottom { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; padding: 0 16px 12px }
+.bench, .shop { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px }
+.lbl { font-size: 13px; color: var(--dim); font-weight: 700; margin-bottom: 6px; display: flex; gap: 10px; align-items: center; min-height: 26px }
+.lbl .sell { padding: 2px 10px; border-color: var(--gold); color: var(--gold) }
+.slots { display: grid; grid-template-columns: repeat(4, 62px); gap: 8px }
+.bslot { width: 62px; height: 62px; border-radius: 12px; background: #0c111b; border: 1px dashed var(--line); display: grid; place-items: center }
+.bslot .tok { width: 54px; font-size: 26px }
+.cards { display: flex; gap: 8px; align-items: stretch }
+.card { position: relative; flex: 1; min-width: 92px; max-width: 150px; background: var(--panel2); border: 2px solid var(--c1); border-radius: 12px; padding: 6px 8px; cursor: pointer; text-align: center; transition: transform .12s, box-shadow .12s }
+.card:hover { transform: translateY(-4px); box-shadow: 0 8px 20px #0008 }
+.card.c2 { border-color: var(--c2) } .card.c3 { border-color: var(--c3); background: linear-gradient(180deg, #1b2a45, var(--panel2)) }
+.card.poor { opacity: .45 } .card.empty { border: 1px dashed var(--line); background: transparent; cursor: default }
+.card.merge { box-shadow: 0 0 0 2px var(--gold), 0 0 18px #ffcc4d66; animation: pulse 1.2s infinite }
+.card .em { font: 34px/1.2 var(--emoji) } .card .nm { font-weight: 800; font-size: 13px } .card .tr { font-size: 11px }
+.card .cost { position: absolute; top: 4px; right: 6px; font-size: 12px; color: var(--gold) }
+.card .own { position: absolute; top: 4px; left: 6px; font-size: 11px; color: var(--gold); font-weight: 800 }
+.reroll { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 76px; font-size: 22px }
+.reroll span { font-size: 12px } .reroll kbd { margin: 0 }
+
+.drag-ghost { transform: scale(1.1); transition: none; font-size: 26px }
+
+/* 모달 */
+.modal { position: fixed; inset: 0; background: #05080ebb; backdrop-filter: blur(4px); display: grid; place-items: center; z-index: 50; animation: fade .2s; padding: 16px }
+.box { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 22px 28px; width: min(980px, 100%); max-height: calc(100vh - 32px); overflow: auto; text-align: center; box-shadow: 0 30px 90px #000c; animation: rise .25s }
+.box h1, .box h2 { margin: 4px 0 } .box h1 { font-size: 40px }
+.summary { width: min(640px, 100%) } .summary.win h2 { color: var(--green); font-size: 34px } .summary.lose h2 { color: var(--red); font-size: 34px }
+.meter { margin: 14px 0; display: flex; flex-direction: column; gap: 6px; text-align: left }
+.mrow { display: grid; grid-template-columns: 190px 1fr 60px; align-items: center; gap: 10px; font-size: 13px }
+.mrow .who i { color: var(--gold); font-style: normal } .mrow b { text-align: right }
+.mrow .bar { height: 10px; background: #0b1018; border-radius: 6px; overflow: hidden }
+.mrow .bar i { display: block; height: 100%; background: linear-gradient(90deg, #4fd1ff, #8f7dff); border-radius: 6px; animation: grow .6s }
+.counts { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin: 6px 0 }
+.aug-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 18px 0 }
+.aug-card { position: relative; display: flex; flex-direction: column; gap: 6px; text-align: left; padding: 18px; min-height: 250px; border-radius: 18px; cursor: pointer;
+  background: var(--panel2); border: 2px solid #b8c4d6; transition: transform .15s, box-shadow .15s }
+.aug-card:hover { transform: translateY(-6px) scale(1.02); box-shadow: 0 16px 40px #000a }
+.aug-card.r2 { border-color: var(--gold); box-shadow: 0 0 22px #ffcc4d22 }
+.aug-card.r3 { border-color: transparent; background: linear-gradient(var(--panel2), var(--panel2)) padding-box, linear-gradient(135deg, #ff7ad9, #7afcff, #ffe97a, #ff7ad9) border-box; box-shadow: 0 0 30px #ff7ad933 }
+.aug-card.rw { border-color: var(--acc) }
+.aug-card.resonant { animation: shine 1.6s infinite }
+.aug-card .rar { font-size: 11px; letter-spacing: 1px; color: var(--dim); font-weight: 800 }
+.aug-card.r2 .rar { color: var(--gold) } .aug-card.r3 .rar { color: #ff9be6 }
+.aug-card .em { font: 46px/1.1 var(--emoji) } .aug-card h3 { margin: 0; font-size: 20px } .aug-card p { margin: 0; color: #c9d4e8; flex: 1 }
+.res-hit { background: linear-gradient(90deg, #ffe06633, #7afcff22); border: 1px solid #ffe066; border-radius: 10px; padding: 8px; font-weight: 800; color: #fff3b0 }
+.res-hit small { display: block; font-weight: 400; color: #e8edf7; margin-top: 2px }
+.res-hint { font-size: 12px; color: var(--dim); border-top: 1px dashed var(--line); padding-top: 6px }
+.end.win h1 { color: var(--gold) } .end.lose h1 { color: var(--red) }
+.endstats { display: flex; gap: 18px; justify-content: center; margin: 10px 0 } .endstats b { color: var(--gold) }
+.aug-line { font: 28px var(--emoji); display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin: 8px 0 }
+.aug-line .res { filter: drop-shadow(0 0 8px #7afcff) }
+.shards { font-size: 22px; color: var(--gold); margin: 10px 0 14px; font-weight: 800 }
+
+/* 툴팁·토스트 */
+#tip { position: fixed; display: none; z-index: 90; max-width: 320px; background: #0d1320f5; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.55; pointer-events: none; box-shadow: 0 10px 30px #000a }
+#tip > div + div { margin-top: 4px } .tip-h { font-size: 15px } #tip .stats { color: #c5d2ea } #tip .skill { color: #c9b6ff }
+.rar.r1 { color: #b8c4d6 } .rar.r2 { color: var(--gold) } .rar.r3 { color: #ff9be6 }
+#toasts { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 80; pointer-events: none }
+.toast { background: #1d2638f2; border: 1px solid var(--line); padding: 9px 18px; border-radius: 12px; animation: toast 2.4s forwards; text-align: center }
+.toast.big { font-size: 20px; border-color: var(--gold); box-shadow: 0 0 40px #ffcc4d55; animation: toast 3.6s forwards } .toast small { font-size: 13px; color: #c5d2ea }
+
+@keyframes pulse { 50% { filter: brightness(1.25) } }
+@keyframes glow { 50% { box-shadow: 0 0 24px #4fd1ff88 } }
+@keyframes shine { 0%, 100% { box-shadow: 0 0 0 2px #fff, 0 0 26px #ffe06688 } 50% { box-shadow: 0 0 0 2px #fff, 0 0 46px #ffe066cc } }
+@keyframes bob { 50% { transform: translateY(-4px) } }
+@keyframes fade { from { opacity: 0 } }
+@keyframes rise { from { transform: translateY(16px); opacity: 0 } }
+@keyframes grow { from { width: 0 } }
+@keyframes toast { 0% { opacity: 0; transform: translateY(-8px) } 10%, 80% { opacity: 1; transform: none } 100% { opacity: 0 } }
+
+@media (max-width: 1280px) {
+  .mid { grid-template-columns: 180px minmax(0, 1fr) 200px; gap: 8px; padding: 8px }
+  .slots { grid-template-columns: repeat(4, 54px) } .bslot { width: 54px; height: 54px } .bslot .tok { width: 46px; font-size: 22px }
+}
+
+/* ───────── 연출 (1단계) ───────── */
+/* 구역별 전장 바닥 (준비 화면). 전투 중에는 캔버스가 같은 색으로 그린다 */
+.arena.z0 { background: radial-gradient(60% 70% at 50% 58%, #4f8a4a33, transparent 70%), linear-gradient(180deg, #18301f, #0a140d) }
+.arena.z1 { background: radial-gradient(60% 70% at 50% 58%, #6a769033, transparent 70%), linear-gradient(180deg, #1c2230, #0b0e15) }
+.arena.z2 { background: radial-gradient(60% 70% at 50% 58%, #7a3fb840, transparent 70%), linear-gradient(180deg, #1f1230, #0a0610) }
+.arena.z3 { background: radial-gradient(60% 70% at 50% 58%, #b8324c40, transparent 70%), linear-gradient(180deg, #2e0f18, #0b0406); animation: bossPulse 2.4s infinite }
+@keyframes bossPulse { 50% { box-shadow: inset 0 0 90px #ff2d5544, 0 10px 40px #0008 } }
+
+/* 유닛 등장·승급 */
+.tok.appear { animation: appear .38s cubic-bezier(.3,1.6,.5,1) }
+@keyframes appear { from { transform: translateY(-14px) scale(.4); opacity: 0 } }
+.tok.merged { animation: merged .7s .28s cubic-bezier(.3,1.5,.5,1) both; z-index: 3 }
+.tok.merged::before, .tok.merged::after { content: ''; position: absolute; inset: -6px; border-radius: 50%; pointer-events: none }
+.tok.merged::before { inset: -45%; background: conic-gradient(from 0deg, #ffcc4d00, #ffcc4dcc 8%, #ffcc4d00 16%, #ffcc4dcc 25%, #ffcc4d00 33%, #ffcc4dcc 42%, #ffcc4d00 50%, #ffcc4dcc 58%, #ffcc4d00 66%, #ffcc4dcc 75%, #ffcc4d00 83%, #ffcc4dcc 92%, #ffcc4d00);
+  mask: radial-gradient(circle, transparent 38%, #000 40%, transparent 72%); -webkit-mask: radial-gradient(circle, transparent 38%, #000 40%, transparent 72%); animation: rays 1s .28s ease-out both }
+.tok.merged::after { border: 3px solid #ffe680; animation: ringOut .7s .3s ease-out both }
+@keyframes merged { 0% { transform: scale(.5); filter: brightness(3) } 55% { transform: scale(1.35); filter: brightness(1.6) } 100% { transform: scale(1); filter: none } }
+@keyframes rays { from { transform: rotate(0) scale(.6); opacity: 1 } to { transform: rotate(120deg) scale(1.2); opacity: 0 } }
+@keyframes ringOut { from { transform: scale(.8); opacity: 1 } to { transform: scale(2.1); opacity: 0 } }
+.fly-ghost { position: fixed; z-index: 70; display: grid; place-items: center; border-radius: 50%; border: 3px solid #ffcc4d; background: #24344ecc; font: 26px var(--emoji); pointer-events: none; box-shadow: 0 0 18px #ffcc4d88 }
+
+/* 시너지 단계 상승 */
+.syn.up { animation: synUp .9s ease-out }
+@keyframes synUp { 0% { transform: scale(1.08); box-shadow: 0 0 0 2px #fff, 0 0 30px var(--c) } 100% { transform: none } }
+
+/* 카드: 뒤집히며 등장, 고르면 커지고 나머지는 가라앉음 */
+.aug-cards { perspective: 1200px }
+.aug-card { animation: cardIn .55s cubic-bezier(.2,1.3,.4,1) both }
+.aug-card:nth-child(2) { animation-delay: .1s } .aug-card:nth-child(3) { animation-delay: .2s }
+@keyframes cardIn { from { transform: rotateY(95deg) translateY(30px) scale(.8); opacity: 0 } }
+.aug-card.r3 { background: linear-gradient(var(--panel2), var(--panel2)) padding-box, linear-gradient(135deg, #ff7ad9, #7afcff, #ffe97a, #ff7ad9, #7afcff) border-box; background-size: 100% 100%, 300% 300%; animation: cardIn .55s cubic-bezier(.2,1.3,.4,1) both, prism 3s linear infinite }
+.aug-card.r3:nth-child(2) { animation-delay: .1s, 0s } .aug-card.r3:nth-child(3) { animation-delay: .2s, 0s }
+@keyframes prism { to { background-position: 0 0, 300% 0 } }
+.aug-card.r3 .em, .aug-card.r2 .em { filter: drop-shadow(0 0 12px #ffe06688) }
+.aug-card.chosen { animation: chosen .43s ease-out forwards !important; z-index: 2 }
+.aug-card.dismiss { animation: dismiss .3s ease-in forwards !important }
+@keyframes chosen { 40% { transform: scale(1.1) translateY(-10px); box-shadow: 0 0 0 3px #fff, 0 0 60px #ffe066 } 100% { transform: scale(1.18) translateY(-24px); opacity: 0; box-shadow: 0 0 0 3px #fff, 0 0 90px #ffe066 } }
+@keyframes dismiss { to { transform: translateY(40px) scale(.9); opacity: 0 } }
+
+/* 공명 컷인 */
+.res-cut { position: fixed; inset: 0; z-index: 85; display: grid; place-items: center; background: #05030acc; animation: fade .2s; cursor: pointer }
+.res-cut .band { position: relative; width: 100%; height: 300px; display: grid; place-items: center; background: linear-gradient(90deg, #1a0f2a00, #1a0f2aee 20%, #1a0f2aee 80%, #1a0f2a00); overflow: hidden }
+.res-cut .band::before { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, #ffe06644 50%, transparent 70%); animation: sweep 1.2s .5s ease-out both }
+.res-cut .ia, .res-cut .ib, .res-cut .ir { position: absolute; font: 96px var(--emoji); top: 40px }
+.res-cut .ia { animation: inL .55s cubic-bezier(.6,0,.9,.5) forwards }
+.res-cut .ib { animation: inR .55s cubic-bezier(.6,0,.9,.5) forwards }
+.res-cut .ir { opacity: 0; animation: boom .7s .5s cubic-bezier(.2,1.6,.4,1) forwards; filter: drop-shadow(0 0 30px #ffe066) }
+.res-cut .rt { position: absolute; bottom: 26px; text-align: center; opacity: 0; animation: rtIn .5s .75s ease-out forwards }
+.res-cut .rt small { color: #ffe066; letter-spacing: 2px; font-weight: 800 } .res-cut .rt b { display: block; font-size: 40px; color: #fff3b0; text-shadow: 0 0 24px #ffb703 } .res-cut .rt p { margin: 2px 0 0; color: #e8edf7 }
+@keyframes inL { from { transform: translateX(-46vw) } to { transform: translateX(-6px) scale(.9); opacity: .2 } }
+@keyframes inR { from { transform: translateX(46vw) } to { transform: translateX(6px) scale(.9); opacity: .2 } }
+@keyframes boom { 0% { opacity: 1; transform: scale(.2) } 100% { opacity: 1; transform: scale(1) } }
+@keyframes rtIn { from { transform: translateY(16px); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes sweep { from { transform: translateX(-100%) } to { transform: translateX(100%) } }
+
+/* 전투 결과 */
+.summary h2 { animation: punch .5s cubic-bezier(.2,1.8,.4,1) both }
+.summary.win h2 { text-shadow: 0 0 30px #4ade8088 } .summary.lose h2 { text-shadow: 0 0 30px #ff5d6c66 }
+@keyframes punch { from { transform: scale(2.2); opacity: 0 } }
+.mrow { animation: rise .35s calc(.15s + var(--i) * .06s) both }
+.mrow.mvp .who { color: var(--gold); font-weight: 800 } .mrow.mvp .bar i { background: linear-gradient(90deg, #ffcc4d, #ff7a45); box-shadow: 0 0 12px #ffcc4d88 }
+.counts .chip { animation: pop .35s calc(.5s + var(--i) * .07s) cubic-bezier(.2,1.8,.4,1) both }
+@keyframes pop { from { transform: scale(0); opacity: 0 } }
+.end h1 { animation: punch .6s cubic-bezier(.2,1.8,.4,1) both }
+.end.win h1 { text-shadow: 0 0 40px #ffcc4daa }
+
+/* ───────── 도트 스프라이트 (DawnLike) ───────── */
+.spr { display: inline-block; flex: none; background-image: var(--s0); background-repeat: no-repeat; image-rendering: pixelated; vertical-align: middle; animation: sprF .9s steps(1) infinite }
+.spr.flip { transform: scaleX(-1) }
+@keyframes sprF { 50% { background-image: var(--s1) } }
+.spr.mini { width: 20px; height: 20px } .spr.tipspr { width: 32px; height: 32px } .spr.big { width: 72px; height: 72px }
+
+/* 유닛 토큰: 원판 대신 발밑 받침 + 스프라이트 (전투 화면과 같은 모습) */
+.tok { --rc: var(--c1); background: none; border: none; place-items: center }
+.tok.c2 { --rc: var(--c2) } .tok.c3 { --rc: var(--c3) }
+.tok.enemy { --rc: var(--red); background: none } .tok.enemy.elite { --rc: #c77dff } .tok.enemy.boss { --rc: var(--gold); box-shadow: none }
+.tok.s2, .tok.s3 { box-shadow: none }
+.tok .base { position: absolute; left: 12%; right: 12%; bottom: 4%; height: 26%; border-radius: 50%; border: 2px solid var(--rc);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--rc) 30%, transparent), transparent); box-shadow: 0 3px 8px #000a }
+.tok.s2 .base { border-width: 3px; box-shadow: 0 0 12px #dfe7f2aa, 0 3px 8px #000a } .tok.s3 .base { border: 3px solid var(--gold); box-shadow: 0 0 18px #ffcc4dcc, 0 3px 8px #000a }
+.tok .spr { position: relative; width: 80%; height: 80%; margin-bottom: 10%; filter: drop-shadow(0 2px 0 #000a) }
+.tok .st { top: -4%; z-index: 1 }
+.tok .its { z-index: 1 }
+.tok.sel { outline: none } .tok.sel .base { border-color: #fff; box-shadow: 0 0 16px #fff }
+.drag-item .tok:not(.enemy) { box-shadow: none } .drag-item .tok:not(.enemy) .base { border-color: var(--gold); box-shadow: 0 0 14px #ffcc4d }
+.bslot .tok { width: 58px }
+.card .cardspr { height: 48px; display: grid; place-items: center } .card .cardspr .spr { width: 46px; height: 46px }
+.fly-ghost { background: none; border: none; box-shadow: none } .fly-ghost .spr { width: 86%; height: 86% }
+.aug-card.rw .em .spr { filter: drop-shadow(0 0 12px #4fd1ff66) }
+.who-list .spr { margin-right: 2px }
+.credits { font-size: 11px; color: var(--dim); opacity: .75; margin: 0 }
