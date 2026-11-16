@@ -12,11 +12,8 @@ concurrency:
   group: pages
   cancel-in-progress: true
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -30,5 +27,13 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
+  # 업로드와 같은 작업에서 바로 배포하면 결과물이 아직 조회되지 않아 실패할 수 있어 작업을 나눈다
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v5
