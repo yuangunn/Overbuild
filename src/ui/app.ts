@@ -107,7 +107,7 @@ function titleScreen() {
     <div class="howto">
       <div><b>${ic('coin')}모집·배치</b>상점에서 사서 끌어다 놓으세요.<br>같은 유닛 3개면 ★ 승급.</div>
       <div><b>${ic('overload')}증강체</b>규칙을 바꾸는 힘. 두 개가 맞물리면<br><em>공명</em>이 터집니다.</div>
-      <div><b>${ic('boss')}15라운드</b>5·10 정예, 15 최종 보스.<br>생명 ${3 + (meta.unlocked.includes('life') ? 1 : 0)}개, 져도 계속 갑니다.</div>
+      <div><b>${ic('boss')}15라운드</b>갈림길에서 다음 방을 고르고, 5·10 정예·15 보스.<br>생명 ${3 + (meta.unlocked.includes('life') ? 1 : 0)}개, 져도 계속 갑니다.</div>
     </div>
     <p class="dim">최고 ${meta.best}라운드 · 클리어 ${meta.wins}회 · 원정 ${meta.runs}회${meta.endless ? ` · 무한 원정 최고 ${meta.endless}라운드` : ''}</p>
     <p class="credits">v${version} · ${CREDITS}</p>
