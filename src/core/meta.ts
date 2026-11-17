@@ -2,12 +2,14 @@
 import type { RunState } from './run.ts'
 import { cleanHero, type HeroDef } from './heroes.ts'
 import { HEAT_RULE, heatOf, shardMult } from './data/heat.ts'
+import { ITEM } from './data/items.ts'
 
 export interface Meta {
   shards: number; unlocked: string[]; best: number; runs: number; wins: number; found: string[]; speed: number; endless: number
   heat: Record<string, number> // 다음 원정에 걸 위험도 (지난 설정을 기억)
   heatBest: number // 클리어한 최고 위험도
   daily: Daily | null // 오늘(마지막으로 한 날) 일일 도전 기록
+  seen: string[] // 처음 손에 넣은 숨은 아이템 (찬란한 아이템·유물). 도감에서 정체가 드러난다
 }
 export interface Daily { date: string; round: number; win: boolean; lives: number; tries: number }
 // 같은 날 기록끼리: 클리어가 먼저, 그다음 도달 라운드, 남은 생명
@@ -18,7 +20,7 @@ const KEY = 'overbuild:meta:v1'
 const RUN_KEY = 'overbuild:run:v1'
 const HERO_KEY = 'overbuild:heroes:v1'
 const SAND_KEY = 'overbuild:sandbox:v1'
-const DEF: Meta = { shards: 0, unlocked: [], best: 0, runs: 0, wins: 0, found: [], speed: 1, endless: 0, heat: {}, heatBest: 0, daily: null }
+const DEF: Meta = { shards: 0, unlocked: [], best: 0, runs: 0, wins: 0, found: [], speed: 1, endless: 0, heat: {}, heatBest: 0, daily: null, seen: [] }
 
 export const UNLOCKS = [
   { id: 'u_phoenix', emoji: '🔥', name: '불사조', desc: '유닛 · 비전/망령. 처음 쓰러지면 부활하며 폭발', cost: 10 },
@@ -46,6 +48,7 @@ for (const k of [KEY, RUN_KEY]) {
 
 export function loadMeta(): Meta {
   const m = { ...DEF, ...read<Partial<Meta>>(KEY) }
+  m.seen = Array.isArray(m.seen) ? m.seen.filter(id => ITEM[id]?.tier) : []
   // 저장분은 손댈 수 있으니 규칙 id·단계를 다시 맞춘다
   m.heat = Object.fromEntries(Object.entries(m.heat ?? {}).filter(([k, v]) => HEAT_RULE[k] && Number.isInteger(v) && v > 0).map(([k, v]) => [k, Math.min(HEAT_RULE[k].max, v)]))
   return m

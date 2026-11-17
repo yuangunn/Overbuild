@@ -1,7 +1,7 @@
 // 한 판(런)의 진행 상태. 전부 JSON 직렬화 가능 → localStorage에 그대로 저장.
 import { UNIT, UNITS, type TraitId, type UnitTpl } from './data/units.ts'
 import { AUG, AUGMENTS, RESONANCES, type AugDef, type PickCtx, type ResDef } from './data/augments.ts'
-import { COMBOS, ITEM, ITEMS, combine } from './data/items.ts'
+import { COMBOS, ITEM, ITEMS, RELICS, combine } from './data/items.ts'
 import { EVENT, EVENTS, type EvCtx } from './data/events.ts'
 import { TRAITS, TRAIT_IDS } from './data/traits.ts'
 import { ENEMIES, applyAffix, endlessElites, enemyMult, makeWave, pickElites, treasureWave, type Wave } from './data/enemies.ts'
@@ -100,6 +100,7 @@ export interface RunState {
   curse?: string // 사건 '버려진 병영': 다음 전투 적 전원 접두사
   augOnly?: number // 사건이 연 증강체 선택: 이 등급만
   promise?: string // 공명술사: 약속한 공명 id (그 짝 중 아직 없는 쪽이 증강체 선택에 반드시 나온다)
+  forge?: Forge // 지금 전리품이 유물 모루·찬란한 무기고인지
   newRes: string[]
   notes: string[] // UI가 꺼내서 토스트로 보여준다
 }
@@ -386,7 +387,7 @@ export function equip(s: RunState, idx: number, unitId: number): string | null {
   if (!u || idx < 0 || idx >= s.items.length) return null
   const next = combine([...u.items, s.items[idx]])
   if (next.length > 3) return '아이템은 유닛당 3개까지'
-  const made = next.find(i => !u.items.includes(i) && ITEM[i].from)
+  const made = next.find(i => !u.items.includes(i) && ITEM[i].from && !ITEM[i].tier)
   const was = !!evoOf(u)
   s.items.splice(idx, 1)
   u.items = next
@@ -482,6 +483,8 @@ export function endBattle(s: RunState, b: Battle): Summary {
     if (has(s, 'growth')) sum.growth = activeRes(s).some(r => r.id === 'res_legend') ? 0.16 : 0.08
     if (isCmd(s, 'drill')) sum.growth += 0.02
     if (sum.growth) for (const u of boardOf(s)) u.bonus += sum.growth
+    const crowns = boardOf(s).filter(u => u.items.includes('crown')).length
+    if (crowns) { s.gold += 3 * crowns; s.notes.push(`황금 왕관: 골드 +${3 * crowns}`) }
   } else {
     s.lives--
     s.pity++
@@ -495,6 +498,8 @@ export function endBattle(s: RunState, b: Battle): Summary {
   if (win && s.room?.kind === 'elite') queueAug(s, 'goldaug') // 정예 조우 보상
   if (win && s.room?.bonus) giveBonus(s, s.room.bonus)
   if (win) { s.queue.push('reward'); rollRewards(s, kind !== 'normal' && s.room?.kind !== 'elite') }
+  if (win && s.room?.kind === 'treasure' && !sum.counts.escaped) forge(s, 'relic') // 숨은 조건: 보물 고블린을 하나도 놓치지 않으면
+  if (win && s.endless && kind === 'boss') forge(s, 'radiant')
   queuePath(s)
   if (!s.queue.length) advance(s)
   return sum
@@ -597,6 +602,7 @@ const evCtx = (s: RunState): EvCtx => ({
   addUnit: (t, star) => addUnit(s, t, star),
   addItem: id => { const it = id === 'combo' ? pick(s.rng, COMBOS) : id ? ITEM[id] : pick(s.rng, ITEMS); s.items.push(it.id); return it.name },
   augment: rarity => { s.augOnly = rarity; rollAugs(s); if (s.augChoices.length) s.queue.splice(1, 0, 'augment'); else s.augOnly = undefined },
+  forge: kind => { if (forge(s, kind)) s.queue.splice(1, 0, 'reward') },
   topTpl: cost => { const top = topTraits(s); const pool = shopPool(s).filter(t => !cost || t.cost === cost); return (pool.find(t => t.traits.some(x => top[0] === x)) ?? pick(s.rng, pool)).id },
   best: () => [...boardOf(s)].sort((a, b) => UNIT[b.tpl].cost * 3 ** b.star - UNIT[a.tpl].cost * 3 ** a.star)[0],
   rand: () => rand(s.rng),
@@ -634,7 +640,7 @@ export function goEndless(s: RunState) {
   s.over = null
   s.after = true
   s.queue.push('reward')
-  rollRewards(s, true)
+  if (!forge(s, 'radiant')) rollRewards(s, true)
 }
 
 export const income = (s: RunState, won: boolean) => 5 + Math.floor(s.round / 3) + (won ? 1 : 2) + (has(s, 'midas') ? 2 : 0) - heatRank(s, 'income')
@@ -744,6 +750,23 @@ function rollRewards(s: RunState, rare: boolean) {
   })
 }
 
+// ── 숨은 아이템 (TFT 유물 모루·찬란한 무기고처럼 셋 중 하나를 고른다). 전리품 자리를 대신한다.
+export type Forge = 'relic' | 'radiant'
+export function forgeChoices(s: RunState, kind: Forge): string[] {
+  const held = new Set([...s.items, ...s.units.flatMap(u => u.items)])
+  if (kind === 'relic') return shuffle(s.rng, RELICS.filter(r => !held.has(r.id)).map(r => r.id)).slice(0, 3)
+  // 찬란한 무기고: 가진 조합 아이템이 있으면 그 강화판이 한 칸
+  const mine = shuffle(s.rng, COMBOS.filter(c => held.has(c.id)).map(c => c.id)).slice(0, 1)
+  return [...new Set([...mine, ...shuffle(s.rng, COMBOS.map(c => c.id))])].slice(0, 3).map(id => 'rad_' + id)
+}
+function forge(s: RunState, kind: Forge): boolean {
+  const ids = forgeChoices(s, kind)
+  if (!ids.length) return false
+  s.forge = kind
+  s.rewardChoices = ids.map((id): Reward => ({ kind: 'item', ids: [id] }))
+  return true
+}
+
 export function pickReward(s: RunState, i: number) {
   const r = s.rewardChoices[i]
   if (s.queue[0] !== 'reward' || !r) return
@@ -753,6 +776,7 @@ export function pickReward(s: RunState, i: number) {
   else if (r.kind === 'train') for (const u of boardOf(s)) u.bonus += r.n
   else s.bonusSlots++
   s.rewardChoices = []
+  s.forge = undefined
   finishPick(s)
 }
 

@@ -359,6 +359,22 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 18px; border: 0; bord
 .combo { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border: 8px solid transparent; border-image: url(./assets/ui/p2-grey.png) 8 fill / 8px }
 .combo > i { font-style: normal; color: var(--dim) } .combo > div { display: flex; flex-direction: column; margin-left: 8px; min-width: 0 }
 
+/* ── 숨은 아이템: 찬란한 아이템은 깜빡이는 금빛 1px 외곽선, 아직 모르는 것은 그림자 */
+.ico.rad { --o: var(--yellow); filter: drop-shadow(1px 0 0 var(--o)) drop-shadow(-1px 0 0 var(--o)) drop-shadow(0 1px 0 var(--o)) drop-shadow(0 -1px 0 var(--o)); animation: radiant 1.2s steps(2) infinite }
+@keyframes radiant { 50% { filter: drop-shadow(1px 0 0 var(--white)) drop-shadow(-1px 0 0 var(--white)) drop-shadow(0 1px 0 var(--white)) drop-shadow(0 -1px 0 var(--white)) } }
+.aug-card .em .ico.rad { animation: none; filter: drop-shadow(1px 0 0 var(--o)) drop-shadow(-1px 0 0 var(--o)) drop-shadow(0 1px 0 var(--o)) drop-shadow(0 -1px 0 var(--o)) drop-shadow(4px 4px 0 var(--k)) }
+.unk .ico { filter: brightness(0); opacity: .45; animation: none }
+.combo.relic.unk b { color: var(--dim) }
+.page h3.sub3 { margin-top: 16px; font-size: 14px }
+.matrix { display: grid; grid-template-columns: repeat(10, 40px); gap: 2px; margin-top: 8px; max-width: 100%; overflow-x: auto }
+.matrix > *, .radiants > span { display: grid; place-items: center; width: 40px; height: 40px }
+.matrix > b { background: var(--plum) } .matrix > span, .radiants > span { background: var(--k) }
+.matrix > span:hover, .radiants > span[data-tip]:hover { outline: 2px solid var(--yellow); outline-offset: -2px }
+.radiants { display: grid; grid-template-columns: repeat(auto-fill, 40px); gap: 2px; margin-top: 8px }
+.tip-recipes { display: grid !important; grid-template-columns: 1fr 1fr; gap: 2px 8px }
+.tip-recipes span { display: flex; align-items: center; gap: 2px; white-space: nowrap }
+.box.pick.relic h2 { color: var(--orange) } .box.pick.radiant h2 { color: var(--yellow) }
+
 /* ── ★3 진화 */
 .tok.evo .base { --rc: var(--cyan); animation: blink 1s steps(2) infinite }
 .tok.evo .st { color: var(--cyan) }

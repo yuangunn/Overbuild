@@ -3,6 +3,7 @@ import * as R from '../src/core/run.ts'
 import { UNIT } from '../src/core/data/units.ts'
 import { AUG, RESONANCES } from '../src/core/data/augments.ts'
 import { EVOS } from '../src/core/data/evolutions.ts'
+import { EVENT } from '../src/core/data/events.ts'
 
 export const val = (u: R.OwnedUnit) => UNIT[u.tpl].cost * 3 ** (u.star - 1)
 
@@ -58,7 +59,7 @@ export function botPick(s: R.RunState, smart: boolean) {
     } else if (s.queue[0] === 'room') {
       const k = s.room?.kind
       if (k === 'rest') R.rest(s, s.lives < s.maxLives ? 'life' : 'train')
-      else if (k === 'event') { const n = 2; let i = 0; while (i < n - 1 && R.eventCan(s, i)) i++; if (R.eventPick(s, i)) R.eventPick(s, n - 1) }
+      else if (k === 'event') { const n = EVENT[s.room!.event!].choices.length; let i = 0; while (i < n - 1 && R.eventCan(s, i)) i++; if (R.eventPick(s, i)) R.eventPick(s, n - 1) }
       else { if (smart) s.offers?.forEach((o, i) => { if (o.kind === 'aug' || s.gold >= o.price + 6) R.buyOffer(s, i) }); R.leaveShop(s) }
     }
     else if (R.isAugQ(s.queue[0])) {

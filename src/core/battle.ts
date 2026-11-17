@@ -37,6 +37,8 @@ export interface Mod {
   onLethal?(b: Battle, f: Fighter): boolean // true면 죽음을 막는다
   onAllyDeath?(b: Battle, dead: Fighter, killer: Fighter | null): void
   onDeath?(b: Battle, f: Fighter, killer: Fighter | null): void // own 전용: 이 유닛이 쓰러질 때 (분열·자폭)
+  onBegin?(b: Battle, f: Fighter): void // own 전용: 전투 시작 직전 (다른 아이템·증강체가 다 붙은 뒤, 체력을 채우기 전)
+  onKill?(b: Battle, f: Fighter, dead: Fighter): void // own 전용: 이 유닛이 적을 쓰러뜨렸을 때
   onEnemyDeath?(b: Battle, dead: Fighter, killer: Fighter | null): void
 }
 
@@ -161,6 +163,8 @@ export class Battle {
 
   start() {
     for (const side of [0, 1] as const) for (const m of this.mods[side]) m.onStart?.(this, side)
+    // 길이를 매번 다시 본다: 장인의 장갑처럼 여기서 붙은 훅도 이어서 부른다
+    for (const f of [...this.fighters]) for (let i = 0; i < f.own.length; i++) f.own[i].onBegin?.(this, f)
     for (const f of this.fighters) f.hp = f.maxHp
   }
 
@@ -332,6 +336,7 @@ export class Battle {
     t.shield = 0
     this.emit({ k: 'death', uid: t.uid, tpl: t.tpl.id, x: t.x, y: t.y, emoji: t.emoji, size: t.size, side: t.side, boss: t.boss, summoned: t.summoned })
     for (const m of t.own) m.onDeath?.(this, t, src)
+    if (src?.alive && src.side !== t.side) for (const m of src.own) m.onKill?.(this, src, t)
     for (const m of this.mods[this.foe(t)]) m.onEnemyDeath?.(this, t, src)
     for (const m of this.mods[t.side]) m.onAllyDeath?.(this, t, src)
   }

@@ -2,13 +2,14 @@
 // 상태 변경은 run.ts가 넘겨주는 EvCtx로만 한다.
 import type { RunState } from '../run.ts'
 import { AUG } from './augments.ts'
-import { ITEM } from './items.ts'
+import { isBase } from './items.ts'
 
 export interface EvCtx {
   s: RunState
   addUnit(tpl: string, star: number): void
   addItem(id?: string): string // 없으면 무작위 기본 아이템
   augment(rarity?: number): void // 증강체 선택을 하나 더 연다 (등급 고정 가능)
+  forge(kind: 'relic' | 'radiant'): void // 유물 모루·찬란한 무기고를 연다
   topTpl(cost?: number): string // 주력 특성에 맞는 유닛
   best(): RunState['units'][number] | undefined // 가장 강한 배치 유닛
   rand(): number
@@ -77,8 +78,8 @@ export const EVENTS: EventDef[] = [
   {
     id: 'altar', name: '연금술 제단', text: '제단에 두 개의 홈이 파여 있다. 무엇을 올리든 하나로 녹아든다.',
     choices: [
-      { label: '아이템 둘을 바친다', desc: '가방의 기본 아이템 두 개를 무작위 조합 아이템 하나로.', can: c => (c.s.items.filter(i => !ITEM[i].from).length >= 2 ? null : '가방에 기본 아이템이 두 개 있어야 합니다'), apply: c => {
-        for (let k = 0; k < 2; k++) c.s.items.splice(c.s.items.findIndex(i => !ITEM[i].from), 1)
+      { label: '아이템 둘을 바친다', desc: '가방의 기본 아이템 두 개를 무작위 조합 아이템 하나로.', can: c => (c.s.items.filter(isBase).length >= 2 ? null : '가방에 기본 아이템이 두 개 있어야 합니다'), apply: c => {
+        for (let k = 0; k < 2; k++) c.s.items.splice(c.s.items.findIndex(isBase), 1)
         return `${c.addItem('combo')}이(가) 만들어졌다!`
       } },
       pass,
@@ -89,6 +90,14 @@ export const EVENTS: EventDef[] = [
     choices: [
       { label: '샘물을 마신다', desc: '증강체 새로고침 +2.', apply: c => { c.s.augRerolls += 2; return '증강체 새로고침 +2' } },
       { label: '동전을 건진다', desc: '골드 +6.', apply: c => { c.s.gold += 6; return '골드 +6' } },
+    ],
+  },
+  {
+    id: 'forge', name: '고대의 대장간', text: '꺼지지 않는 화로 곁에 주인 없는 모루가 놓여 있다. 무엇을 바치느냐에 따라 다른 것이 만들어진다.',
+    choices: [
+      { label: '20골드를 바친다', desc: '유물 셋 중 하나를 고른다. 유물은 다른 아이템과 합쳐지지 않는 고유 아이템이다.', can: gold(20), apply: c => { c.s.gold -= 20; c.forge('relic'); return '모루 위에 낯선 물건이 놓였다.' } },
+      { label: '생명 1을 바친다', desc: '찬란한 아이템 셋 중 하나를 고른다. 조합 아이템의 효과가 모두 두 배다.', can: c => (c.s.lives <= 1 ? '생명이 하나뿐입니다' : null), apply: c => { c.s.lives--; c.forge('radiant'); return '화로가 눈부시게 타올랐다.' } },
+      pass,
     ],
   },
 ]

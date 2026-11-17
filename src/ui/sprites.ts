@@ -135,6 +135,16 @@ export const ICON: Record<string, [string, number, number]> = {
   // 조합 아이템
   execblade: ['MedWep', 4, 0], stormrune: ['Wand', 0, 0], bastion: ['Shield', 4, 0], infinity: ['Ring', 6, 3], bloodthirst: ['LongWep', 4, 1],
   luckyring: ['Ring', 2, 1], oath: ['Amulet', 1, 2], arcburst: ['Amulet', 7, 0], titan: ['Armor', 2, 6], quickdraw: ['LongWep', 0, 0],
+  twinblade: ['MedWep', 5, 0], spellspear: ['LongWep', 4, 4], lastblade: ['LongWep', 2, 1], flameblade: ['MedWep', 2, 0], awaken: ['LongWep', 1, 1],
+  charger: ['Armor', 5, 6], thunderdagger: ['ShortWep', 7, 0], hunterfang: ['ShortWep', 3, 0], brokenwing: ['Amulet', 1, 1], arcarrow: ['Ammo', 3, 2],
+  sagehelm: ['Hat', 1, 2], stoneheart: ['Armor', 7, 6], regen: ['Armor', 3, 0], sunfire: ['Armor', 0, 0], quakeshield: ['Shield', 3, 0],
+  sagestone: ['Money', 3, 2], salvation: ['Potion', 6, 0], hymn: ['Music', 1, 3], vampdice: ['Ring', 2, 4], luckcharm: ['Shield', 1, 0], emberdice: ['Rock', 3, 0],
+  bloodrune: ['Scroll', 2, 1], lifering: ['Ring', 0, 2], bombcharm: ['Amulet', 4, 0], guardring: ['Ring', 1, 1], manarune: ['Scroll', 3, 0],
+  bloodsword: ['LongWep', 1, 6], crossbow: ['Ammo', 5, 1], thornmail: ['Armor', 6, 8], wellspring: ['Potion', 5, 2], fatedice: ['Money', 6, 1],
+  hungryfang: ['Amulet', 3, 0], angelcharm: ['Amulet', 0, 1], chainbomb: ['Scroll', 4, 3], bondring: ['Ring', 5, 3],
+  // 유물 (찬란한 아이템은 원래 조합 아이템 그림에 빛을 두른다)
+  lantern: ['Music', 1, 4], cloak: ['Armor', 7, 7], gloves: ['Glove', 3, 0], prism: ['Money', 0, 2], cursed: ['LongWep', 5, 1], angel: ['Scroll', 2, 5],
+  scope: ['Tool', 3, 0], bigpotion: ['Potion', 4, 2], bloodvial: ['Potion', 7, 4], spring: ['Tool', 2, 2], crown: ['Hat', 1, 3], trident: ['LongWep', 6, 0],
   // 특성 (문장 증강체도 같은 아이콘)
   ...TRAIT_ICON, ...Object.fromEntries(Object.entries(TRAIT_ICON).map(([k, v]) => ['crest_' + k, v])),
   // 증강체
@@ -158,10 +168,11 @@ for (const s of Object.keys(ISHEET)) { const im = new Image(); im.src = iconUrl(
 
 // DOM: 크기는 CSS(.ico.s16/s32/s48/s64)가 정한다. 16의 배수라 도트가 고르게 커진다
 export function iconHTML(id: string, cls = 's16'): string {
-  const m = ICON[id]
+  const rad = id.startsWith('rad_')
+  const m = ICON[rad ? id.slice(4) : id]
   if (!m) return ''
   const [s, c, r] = m, [w, h] = ISHEET[s]
-  return `<i class="ico ${cls}" style="background-image:url(${iconUrl(s)});--w:${w};--h:${h};--c:${c};--r:${r}"></i>`
+  return `<i class="ico ${cls}${rad ? ' rad' : ''}" style="background-image:url(${iconUrl(s)});--w:${w};--h:${h};--c:${c};--r:${r}"></i>`
 }
 
 // 캔버스: (x, y) 가운데에 size 크기로

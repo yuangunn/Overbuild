@@ -5,7 +5,7 @@ import { UNIT, UNITS, type TraitId, type UnitTpl } from '../core/data/units.ts'
 import { ENEMIES, AFFIX, AFFIXES, ELITES, enemyMult } from '../core/data/enemies.ts'
 import { TRAITS, TRAIT_IDS } from '../core/data/traits.ts'
 import { AUG, AUGMENTS, RESONANCES } from '../core/data/augments.ts'
-import { ITEM, ITEMS, COMBOS, combine } from '../core/data/items.ts'
+import { ITEM, ITEMS, COMBOS, RELICS, RADIANTS, combine, recipeOf } from '../core/data/items.ts'
 import { CMD } from '../core/data/commanders.ts'
 import { HEAT, HEAT_RULE, heatOf, shardMult } from '../core/data/heat.ts'
 import { EVOS } from '../core/data/evolutions.ts'
@@ -65,6 +65,7 @@ const unlockIc = (id: string, sz = 32) => id.startsWith('u_') ? sprHTML(id.slice
 const traitChip = (id: keyof typeof TRAITS) => `<span class="chip" style="--c:${TRAITS[id].color}">${ic(id)}${TRAITS[id].name}</span>`
 const traitChips = (t: UnitTpl) => t.traits.map(traitChip).join('')
 const COUNT_NAMES: Record<string, string> = { arcburst: `${ic('arcburst')}마력 폭발`, treasure: `${sprHTML('treasure', '💰', 'mini', 1)}보물 고블린 처치`, escaped: `${sprHTML('treasure', '💰', 'mini', 1)}보물 고블린 도망`, rebirth: `${sprHTML('phoenix', '🔥', 'mini')}불사조 부활`, ring: `${ic('ring')}쌍둥이 반지`, rune: `${ic('rune')}폭발 룬`, undead: `${ic('undead')}망령 부활`, res_bomb: `${ic('res_bomb')}망자의 폭탄` }
+const TIER_NAME: Record<string, string> = { combo: '조합', radiant: '찬란한 아이템', relic: '유물' }
 const countName = (k: string) => COUNT_NAMES[k] ?? (AUG[k] ? `${augIc(k)}${AUG[k].name}` : k)
 const PARADE = ['shieldbearer', 'ranger', 'apprentice', 'cutthroat', 'wolf', 'frostwitch', 'golem', 'necromancer']
 
@@ -176,10 +177,28 @@ function codexScreen() {
     <h2 class="sub">★3 진화표</h2>
     <p class="dim">★3 유닛이 짝 아이템을 들면 스킬이 바뀝니다. 그 아이템이 재료로 들어간 조합 아이템이어도 됩니다.</p>
     <div class="combos">${Object.entries(EVOS).filter(([id]) => !UNIT[id].locked || meta.unlocked.includes('u_' + id)).map(([id, e]) => `<div class="combo">${sprHTML(id, '', 'tipspr', 0)}<i>★3 +</i>${ic(e.item, 32)}<i>→</i><div><b class="gold">${e.name}</b><span class="dim small">${UNIT[id].name} · ${e.desc}</span></div></div>`).join('')}</div>
-    <h2 class="sub">아이템 조합표</h2>
-    <p class="dim">한 유닛에 재료 두 개를 끼우면 자동으로 합쳐져 한 칸만 씁니다. 재료 효과를 모두 갖고 고유 효과가 붙습니다.</p>
-    <div class="combos">${COMBOS.map(c => `<div class="combo" data-tip="i:${c.id}">${ic(c.from![0], 32)}<i>+</i>${ic(c.from![1], 32)}<i>→</i>${ic(c.id, 32)}<div><b>${c.name}</b><span class="dim small">${c.desc}</span></div></div>`).join('')}</div>
+    <h2 class="sub">아이템 조합표 · ${COMBOS.length}종</h2>
+    <p class="dim">기본 아이템 두 개를 한 유닛에 끼우면 어떤 짝이든 합쳐져 한 칸만 씁니다. 가로줄과 세로줄이 만나는 칸이 결과이고, 올려 보면 효과가 나옵니다. 찬란한 강화판을 찾은 칸은 빛납니다.</p>
+    <div class="matrix"><i></i>${ITEMS.map(i => `<b data-tip="i:${i.id}">${ic(i.id, 32)}</b>`).join('')}${ITEMS.map(a => `<b data-tip="i:${a.id}">${ic(a.id, 32)}</b>${ITEMS.map(b => {
+      const c = recipeOf(a.id, b.id)!, rad = meta.seen.includes('rad_' + c.id)
+      return `<span data-tip="i:${rad ? 'rad_' : ''}${c.id}">${ic((rad ? 'rad_' : '') + c.id, 32)}</span>`
+    }).join('')}`).join('')}</div>
+    ${hiddenCodex()}
   </div>`
+}
+
+// 숨은 아이템: 처음 손에 넣기 전까지는 그림자와 ？？？ (Balatro·아이작 도감처럼)
+function hiddenCodex() {
+  const got = (id: string) => meta.seen.includes(id)
+  const nr = RELICS.filter(r => got(r.id)).length, nd = RADIANTS.filter(r => got(r.id)).length
+  return `<h2 class="sub">숨은 아이템 · ${nr + nd}/${RELICS.length + RADIANTS.length}</h2>
+    <p class="dim">조합으로는 만들 수 없고, 처음 손에 넣기 전까지 정체가 가려져 있습니다. 얻는 곳도 숨어 있으니 보물 창고·사건·무한 원정을 잘 살펴보세요.</p>
+    <h3 class="sub3">유물 ${nr}/${RELICS.length} <span class="dim small">다른 아이템과 합쳐지지 않는 고유 아이템 (TFT 유물처럼)</span></h3>
+    <div class="combos">${RELICS.map(r => got(r.id)
+      ? `<div class="combo relic" data-tip="i:${r.id}">${ic(r.id, 32)}<div><b class="gold">${r.name}</b><span class="dim small">${r.desc}</span></div></div>`
+      : `<div class="combo relic unk">${ic(r.id, 32)}<div><b>？？？</b><span class="dim small">아직 찾지 못했습니다.</span></div></div>`).join('')}</div>
+    <h3 class="sub3">찬란한 아이템 ${nd}/${RADIANTS.length} <span class="dim small">조합 아이템의 효과가 모두 두 배인 강화판 (TFT 찬란한 아이템처럼)</span></h3>
+    <div class="radiants">${RADIANTS.map(r => got(r.id) ? `<span data-tip="i:${r.id}">${ic(r.id, 32)}</span>` : `<span class="unk">${ic(r.base!, 32)}</span>`).join('')}</div>`
 }
 
 function runScreen(s: R.RunState) {
@@ -445,11 +464,16 @@ function augCard(s: R.RunState, id: string) {
   </div>`
 }
 
+const FORGE = {
+  relic: ['유물 모루', '유물은 다른 아이템과 합쳐지지 않는 고유 아이템입니다. 하나를 가져가세요.'],
+  radiant: ['찬란한 무기고', '조합 아이템의 효과가 모두 두 배인 강화판입니다. 하나를 가져가세요.'],
+}
 function rewardModal(s: R.RunState) {
   const rare = s.last && s.last.kind !== 'normal'
-  return `<div class="modal"><div class="box pick">
-    <h2>${rare ? '정예 전리품' : '전리품'}</h2>
-    <p class="dim">하나를 가져가세요.</p>
+  const [title, sub] = s.forge ? FORGE[s.forge] : [rare ? '정예 전리품' : '전리품', '하나를 가져가세요.']
+  return `<div class="modal"><div class="box pick ${s.forge ?? ''}">
+    <h2>${title}</h2>
+    <p class="dim">${sub}</p>
     <div class="aug-cards">${s.rewardChoices.map((r, i) => `<div class="aug-card rw" data-act="pickReward" data-i="${i}">${rewardBody(r)}</div>`).join('')}</div>
   </div></div>`
 }
@@ -462,7 +486,7 @@ function rewardBody(r: R.Reward) {
       return `<div class="rar">영입</div><div class="em">${sprHTML(t.id, t.emoji, 'big', 0)}</div><h3>${t.name} ${stars(r.star)}</h3><div class="fit">${traitChips(t)}</div><p>${t.skillName} — ${t.skillDesc}</p>${full ? `<p class="bad">대기석이 가득 차 받으면 ${t.cost * 3 ** (r.star - 1)}골드로 바뀝니다</p>` : ''}`
     }
     case 'gold': return `<div class="rar">보물</div><div class="em">${ic('gold', 64)}</div><h3>+${r.n} 골드</h3><p>상점을 더 돌리거나 비싼 유닛을 사세요.</p>`
-    case 'item': return `<div class="rar">장비</div><div class="em">${r.ids.map(i => ic(i, r.ids.length > 1 ? 48 : 64, ITEM[i].emoji)).join('')}</div><h3>${r.ids.map(i => ITEM[i].name).join(' + ')}</h3><p>${r.ids.map(i => ITEM[i].desc).join('<br>')}</p>`
+    case 'item': return `<div class="rar">${TIER_NAME[ITEM[r.ids[0]].tier ?? ''] ?? '장비'}${ITEM[r.ids[0]].tier && !meta.seen.includes(r.ids[0]) ? ' · <span class="gold">처음</span>' : ''}</div><div class="em">${r.ids.map(i => ic(i, r.ids.length > 1 ? 48 : 64, ITEM[i].emoji)).join('')}</div><h3>${r.ids.map(i => ITEM[i].name).join(' + ')}</h3><p>${r.ids.map(i => ITEM[i].desc).join('<br>')}</p>`
     case 'train': return `<div class="rar">단련</div><div class="em">${ic('train', 64)}</div><h3>전원 +${Math.round(r.n * 100)}%</h3><p>지금 배치된 모든 유닛의 공격력·체력이 영구히 올라갑니다.</p>`
     case 'slot': return `<div class="rar">지휘력</div><div class="em">${ic('slot', 64)}</div><h3>배치 칸 +1</h3><p>이번 원정 내내 한 명 더 내보낼 수 있습니다.</p>`
   }
@@ -563,9 +587,11 @@ function tipHTML(key: string): string {
   }
   if (k === 'i') {
     const it = ITEM[v]
-    const rec = it.from ? `<div class="dim tip-h">조합: ${it.from.map(x => ic(x) + ITEM[x].name).join(' + ')}</div>`
-      : COMBOS.filter(c => c.from!.includes(v)).map(c => { const o = c.from!.find(x => x !== v) ?? v; return `<div class="dim tip-h">+ ${ic(o)}${ITEM[o].name} → ${ic(c.id)}<span class="gold">${c.name}</span></div>` }).join('')
-    return `<div class="tip-h">${ic(v, 32, it.emoji)} <b>${it.name}</b>${it.from ? ' <span class="gold">조합</span>' : ''}</div><div>${it.desc}</div>${rec}`
+    const rec = it.tier === 'relic' ? '<div class="dim tip-h">다른 아이템과 합쳐지지 않는 고유 아이템</div>'
+      : it.tier === 'radiant' ? `<div class="dim tip-h">${ic(it.base!)}${ITEM[it.base!].name}의 강화판 · 합쳐지지 않음</div>`
+      : it.from ? `<div class="dim tip-h">조합: ${it.from.map(x => ic(x) + ITEM[x].name).join(' + ')}</div>`
+      : `<div class="dim tip-h tip-recipes">${COMBOS.filter(c => c.from!.includes(v)).map(c => `<span>+${ic(c.from!.find(x => x !== v) ?? v)}→${ic(c.id)}${c.name}</span>`).join('')}</div>`
+    return `<div class="tip-h">${ic(v, 32, it.emoji)} <b>${it.name}</b> <span class="gold">${TIER_NAME[it.tier ?? (it.from ? 'combo' : '')] ?? ''}</span></div><div>${it.desc}</div>${rec}`
   }
   return ''
 }
@@ -807,10 +833,20 @@ function act(name: string, el?: HTMLElement) {
       else if (name === 'item') sel = sel.item === +d.i! ? {} : { item: +d.i! }
       else if (name === 'rerollAug') R.rerollAugs(s)
       else if (name === 'pickAug') return choose(el!, () => celebrate(R.pickAug(s, d.id!)))
-      else if (name === 'pickReward') return choose(el!, () => R.pickReward(s, +d.i!))
+      else if (name === 'pickReward') return choose(el!, () => { const r = s.rewardChoices[+d.i!]; R.pickReward(s, +d.i!); if (r?.kind === 'item') discover(r.ids) })
     }
   }
   after()
+}
+
+// 숨은 아이템을 처음 손에 넣으면 도감에서 정체가 드러난다
+function discover(ids: string[]) {
+  for (const id of ids) {
+    if (!ITEM[id]?.tier || meta.seen.includes(id)) continue
+    meta.seen.push(id)
+    M.saveMeta(meta)
+    toast(`${ic(id, 32)} 새로 발견! <b>${ITEM[id].name}</b> — 도감에 기록했습니다`, true)
+  }
 }
 
 function celebrate(fresh: string[]) {
@@ -976,7 +1012,7 @@ const palCard = (k: 'unit' | 'item', id: string, art: string, name: string, tip:
 function sandBottom() {
   const tabs: [typeof palTab, string][] = [['ally', '아군 유닛'], ['foe', '적'], ['hero', `나만의 영웅 ${heroes.length}`], ['item', '아이템']]
   const units = palTab === 'ally' ? UNITS : palTab === 'hero' ? heroes.map(h => UNIT[h.id]).filter(Boolean) : palTab === 'foe' ? Object.values(ENEMIES) : []
-  const cards = palTab === 'item' ? [...ITEMS, ...COMBOS].map(i => palCard('item', i.id, ic(i.id, 32, i.emoji), i.name, 'i:' + i.id))
+  const cards = palTab === 'item' ? [...ITEMS, ...COMBOS, ...[...RELICS, ...RADIANTS].filter(i => meta.seen.includes(i.id))].map(i => palCard('item', i.id, ic(i.id, 32, i.emoji), i.name, 'i:' + i.id))
     : units.map(t => palCard('unit', t.id, sprHTML(t.id, t.emoji, '', palTab === 'foe' ? 1 : 0), t.name, 'n:' + t.id))
   return `<footer class="bottom sand">
     <div class="palette" data-drop="sell">

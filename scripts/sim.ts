@@ -4,7 +4,7 @@ import { STEP, type Battle, type Fighter } from '../src/core/battle.ts'
 import * as R from '../src/core/run.ts'
 import { UNIT, UNITS } from '../src/core/data/units.ts'
 import { AUG, AUGMENTS, RESONANCES } from '../src/core/data/augments.ts'
-import { COMBOS, ITEMS, combine } from '../src/core/data/items.ts'
+import { COMBOS, ITEM, ITEMS, RADIANTS, RELICS, combine, recipeOf } from '../src/core/data/items.ts'
 import { EVOS } from '../src/core/data/evolutions.ts'
 import { EVENTS } from '../src/core/data/events.ts'
 import { ENEMIES, enemyMult, makeWave } from '../src/core/data/enemies.ts'
@@ -315,8 +315,10 @@ console.log('\n[1g] 아이템 조합')
   R.equip(s, 1, 1) // dice → 처형자의 검
   ok(s.units[0].items.join() === 'execblade' && s.items.join() === 'feather,helm,charm' && s.notes.some(n => n.includes('처형자의 검')), '대검 + 주사위 → 처형자의 검, 한 칸만 씀')
   R.equip(s, 0, 1); R.equip(s, 0, 1); R.equip(s, 0, 1)
-  ok(s.units[0].items.join() === 'execblade,feather,bastion' && !s.items.length, '조합 뒤 빈 칸에 3개 더: 깃털 + 투구·부적 → 불굴의 성채')
-  ok(combine(['sword', 'feather', 'dice']).join() === 'execblade,feather' && combine(['execblade', 'sword']).length === 2, '앞에서부터 합치고, 조합 아이템은 재료가 아님')
+  ok(s.units[0].items.join() === 'execblade,charger,charm' && !s.items.length, '조합 뒤 빈 칸에: 깃털 + 투구 → 돌격대의 흉갑, 부적은 한 칸')
+  ok(combine(['sword', 'feather', 'dice']).join() === 'twinblade,dice' && combine(['execblade', 'sword']).length === 2, '앞에서부터 합치고, 조합 아이템은 재료가 아님')
+  const pairs = ITEMS.flatMap((a, i) => ITEMS.slice(i).map(b => recipeOf(a.id, b.id)?.id))
+  ok(COMBOS.length === 45 && pairs.every(Boolean) && new Set(pairs).size === 45, `기본 9종의 모든 짝(같은 것 둘 포함)이 서로 다른 조합 아이템 45종 (${new Set(pairs).size})`)
   ok(!ITEMS.some(i => COMBOS.includes(i)) && COMBOS.every(c => c.from!.every(x => ITEMS.some(i => i.id === x))), '조합 아이템은 전리품에 나오지 않고 재료는 모두 기본 아이템')
   // ★ 승급으로 합쳐질 때도 조합
   const m = R.newRun({ unlocked: [] }, 9)
@@ -449,6 +451,75 @@ console.log('\n[1j] 시드·일일 도전')
   fin(15, true)
   ok(m.daily?.win === true && m.daily.tries === 4, '클리어하면 클리어가 최고 기록')
 }
+
+// ───────────────────────── 1k. 숨은 아이템 (찬란한 아이템·유물)
+console.log('\n[1k] 숨은 아이템')
+{
+  const bad: string[] = []
+  for (const it of [...COMBOS, ...RADIANTS, ...RELICS]) {
+    try {
+      const b = run(vs(setup(8, [['cutthroat', 2, [it.id]], ['shieldbearer', 2], ['apprentice', 2]]), 'brute', 4), 20)
+      if (b.fighters.some(f => !Number.isFinite(f.hp) || !Number.isFinite(f.atk) || !Number.isFinite(f.shield))) bad.push(it.id)
+    } catch (e) { bad.push(`${it.id}:${(e as Error).message}`) }
+  }
+  ok(!bad.length, `조합 ${COMBOS.length}·찬란한 ${RADIANTS.length}·유물 ${RELICS.length}종 모두 전투에서 오류·NaN 없음 ${bad.join(' ')}`)
+  ok(ITEM.rad_execblade.desc.includes('공격력 +80%') && ITEM.rad_execblade.desc.includes('8%') && ITEM.rad_infinity.desc.includes('4번'), '찬란한 아이템 설명은 수치 두 배 (처형자의 검 40→80%, 무한의 고리 2→4번)')
+  const dealt = (id: string) => run(vs(setup(8, [['cutthroat', 2, [id]]]), 'dummy', 1), 10).fighters.find(f => f.side === 0)!.dealt
+  const d1 = dealt('execblade'), d2 = dealt('rad_execblade')
+  ok(d2 > d1 * 1.3, `찬란한 처형자의 검이 실제로 더 세다 (10초 피해 ${Math.round(d1)} → ${Math.round(d2)})`)
+  ok(combine(['rad_execblade', 'lantern', 'sword']).length === 3 && R.hasItem(['rad_bastion'], 'helm') && !R.hasItem(['lantern'], 'helm'), '숨은 아이템은 다른 아이템과 합쳐지지 않고, 찬란한 아이템은 ★3 진화 짝으로도 쓰인다')
+
+  const tank = (id: string) => run(vs(setup(8, [['bear', 1, [id]]]), 'brute', 4), 20)
+  ok(of(tank('lantern'), 'bear').st.ln === 1, '정지의 등불: 체력 40% 아래에서 한 번 무적')
+  ok(of(tank('angel'), 'bear').st.angel === 1, '천사의 깃펜: 처음 쓰러질 때 버티고 일어난다')
+  const cl = run(vs(setup(8, [['apprentice', 1, ['cloak']]]), 'brute', 4), 20)
+  ok(mine(cl).filter(f => f.summoned && f.tpl.id === 'apprentice').length === 2, '분열의 외투: 쓰러지면 분신 둘')
+  const print = (f: Fighter) => [f.atk, f.asBonus, f.maxHp, f.armor, f.crit, f.lifesteal, f.manaGain, f.spell, f.own.length, f.overheal, f.skillCrit].join()
+  const g0 = R.buildBattle(vs(setup(8, [['bear', 2]]), 'dummy', 1)), g1 = R.buildBattle(vs(setup(8, [['bear', 2, ['gloves']]]), 'dummy', 1))
+  g0.start(); g1.start()
+  ok(print(mine(g0)[0]) !== print(mine(g1)[0]), '떠돌이 장인의 장갑: 전투 시작에 조합 아이템 둘이 붙는다')
+
+  // 전투 결과를 정해 두고 정산만 본다
+  const settle = (s: R.RunState, win: boolean, counts: Record<string, number> = {}) => {
+    const b = R.buildBattle(s)
+    b.done = true; b.win = win; b.counts = counts
+    return R.endBattle(s, b)
+  }
+  const c = setup(6, [['bear', 2, ['crown']]]); c.queue = []
+  const gold0 = c.gold
+  settle(c, true)
+  ok(c.gold - gold0 === 3 && c.notes.some(x => x.includes('황금 왕관')), '황금 왕관: 배치한 채 이기면 골드 +3')
+
+  const tr = setup(6, [['bear', 2]]); tr.queue = []; tr.room = { kind: 'treasure' }
+  settle(tr, true, { treasure: 3 })
+  ok(tr.forge === 'relic' && tr.rewardChoices.length === 3 && tr.rewardChoices.every(r => r.kind === 'item' && ITEM[r.ids[0]].tier === 'relic'), '숨은 조건: 보물 고블린을 하나도 놓치지 않으면 유물 모루 (셋 중 하나)')
+  const tr2 = setup(6, [['bear', 2]]); tr2.queue = []; tr2.room = { kind: 'treasure' }
+  settle(tr2, true, { treasure: 2, escaped: 1 })
+  ok(!tr2.forge && !tr2.rewardChoices.some(r => r.kind === 'item' && ITEM[r.ids[0]].tier), '하나라도 도망치면 보통 전리품')
+
+  const ev = R.newRun({ unlocked: [] }, 5)
+  Object.assign(ev, { queue: ['room'], room: { kind: 'event', event: 'forge' }, gold: 30, items: ['titan'] })
+  R.eventPick(ev, 0)
+  const relic = ev.rewardChoices[0].kind === 'item' ? ev.rewardChoices[0].ids[0] : ''
+  ok(ev.gold === 10 && ev.queue[0] === 'reward' && ev.forge === 'relic' && ITEM[relic]?.tier === 'relic', '고대의 대장간: 20골드 → 유물 모루')
+  R.pickReward(ev, 0)
+  ok(ev.items.includes(relic) && !ev.forge && !ev.queue.length, '고른 유물이 가방에 들어오고 방으로 돌아간다')
+  Object.assign(ev, { queue: ['room'], lives: 3 })
+  R.eventPick(ev, 1)
+  ok(ev.lives === 2 && ev.forge === 'radiant' && ev.rewardChoices.some(r => r.kind === 'item' && r.ids[0] === 'rad_titan'), '생명 1 → 찬란한 무기고, 가진 조합 아이템(거인의 결의)의 강화판이 한 칸')
+
+  const en = R.newRun({ unlocked: [] }, 6)
+  Object.assign(en, { over: 'win', round: 15, queue: [] })
+  R.goEndless(en)
+  ok(en.forge === 'radiant' && en.rewardChoices.every(r => r.kind === 'item' && ITEM[r.ids[0]].tier === 'radiant'), '무한 원정에 들어서면 찬란한 무기고')
+  R.pickReward(en, 0)
+  const eb = setup(25, [['bear', 3]]); eb.queue = []
+  eb.endless = { won: 0, elite: 0, fresh: 0 }
+  eb.wave = { label: 'boss', kind: 'boss', spawns: [] }
+  settle(eb, true)
+  ok(eb.forge === 'radiant', '무한 원정 보스를 쓰러뜨리면 찬란한 무기고')
+}
+
 
 // ───────────────────────── 2. 사기 빌드 (15라운드 보스)
 console.log('\n[2] 사기 빌드 — 15라운드 보스, 시드 20개')
