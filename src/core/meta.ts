@@ -7,13 +7,18 @@ export interface Meta {
   shards: number; unlocked: string[]; best: number; runs: number; wins: number; found: string[]; speed: number; endless: number
   heat: Record<string, number> // 다음 원정에 걸 위험도 (지난 설정을 기억)
   heatBest: number // 클리어한 최고 위험도
+  daily: Daily | null // 오늘(마지막으로 한 날) 일일 도전 기록
 }
+export interface Daily { date: string; round: number; win: boolean; lives: number; tries: number }
+// 같은 날 기록끼리: 클리어가 먼저, 그다음 도달 라운드, 남은 생명
+export const dailyBetter = (a: Pick<Daily, 'round' | 'win' | 'lives'>, b: Pick<Daily, 'round' | 'win' | 'lives'>) =>
+  a.win !== b.win ? a.win : a.round !== b.round ? a.round > b.round : a.lives > b.lives
 
 const KEY = 'overbuild:meta:v1'
 const RUN_KEY = 'overbuild:run:v1'
 const HERO_KEY = 'overbuild:heroes:v1'
 const SAND_KEY = 'overbuild:sandbox:v1'
-const DEF: Meta = { shards: 0, unlocked: [], best: 0, runs: 0, wins: 0, found: [], speed: 1, endless: 0, heat: {}, heatBest: 0 }
+const DEF: Meta = { shards: 0, unlocked: [], best: 0, runs: 0, wins: 0, found: [], speed: 1, endless: 0, heat: {}, heatBest: 0, daily: null }
 
 export const UNLOCKS = [
   { id: 'u_phoenix', emoji: '🔥', name: '불사조', desc: '유닛 · 비전/망령. 처음 쓰러지면 부활하며 폭발', cost: 10 },
@@ -79,6 +84,11 @@ export function settle(m: Meta, s: RunState): number {
     saveMeta(m)
     saveRun(null)
     return shards
+  }
+  if (s.daily) {
+    const cur = { round: s.round, win: s.over === 'win', lives: s.lives }
+    const d = m.daily?.date === s.daily ? m.daily : { date: s.daily, round: 0, win: false, lives: 0, tries: 0 }
+    m.daily = { ...(dailyBetter(cur, d) ? { ...d, ...cur } : d), tries: d.tries + 1 }
   }
   const shards = Math.round((s.stats.won + s.stats.elite * 2 + (s.over === 'win' ? 10 : 0) + s.stats.fresh * 2) * x)
   m.shards += shards

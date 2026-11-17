@@ -9,7 +9,7 @@ import { Battle, STEP, type Mod, type Side } from './battle.ts'
 import { mkRng, pick, pickW, rand, shuffle, type Rng } from './rng.ts'
 import { CMD, COMMANDERS } from './data/commanders.ts'
 import { AFFIXES } from './data/enemies.ts'
-import { HEAT_RULE } from './data/heat.ts'
+import { HEAT, HEAT_RULE } from './data/heat.ts'
 import { EVOS, type EvoDef } from './data/evolutions.ts'
 
 export const MAX_ROUND = 15
@@ -59,6 +59,10 @@ export interface Summary {
 
 export interface RunState {
   rng: Rng
+  wrng?: Rng // 세계 난수 (v0.3 저장분엔 없음 → rng)
+  arng?: Rng // 증강체 난수
+  seed?: number
+  daily?: string // 일일 도전 날짜 (YYYY-MM-DD)
   round: number
   lives: number
   maxLives: number
@@ -101,6 +105,43 @@ export interface RunState {
 }
 
 const has = (s: RunState, id: string) => s.augments.includes(id)
+const W = (s: RunState) => s.wrng ?? s.rng
+const A = (s: RunState) => s.arng ?? s.rng
+
+// ── 시드: 32비트 수 ↔ 7글자 코드 (Crockford base32, 헷갈리는 I·L·O·U 없음)
+const B32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+export const randomSeed = () => Math.floor(Math.random() * 2 ** 32) >>> 0
+export function seedCode(n: number) {
+  let c = ''
+  for (let i = 0; i < 7; i++) { c = B32[n % 32] + c; n = Math.floor(n / 32) }
+  return c.slice(0, 4) + '-' + c.slice(4)
+}
+export function parseSeed(code: string): number | null {
+  const c = code.toUpperCase().replace(/[^0-9A-Z]/g, '').replace(/O/g, '0').replace(/[IL]/g, '1')
+  if (!c || c.length > 7) return null
+  let n = 0
+  for (const ch of c) { const v = B32.indexOf(ch); if (v < 0) return null; n = n * 32 + v }
+  return n < 2 ** 32 ? n : null
+}
+
+// ── 일일 도전 (Slay the Spire 일일 등반처럼): 날짜로 시드·사령관·위험도 규칙 둘이 정해지고, 영구 해금 없이 시작한다
+export function dailySeed(date: string) {
+  let h = 2166136261
+  for (const ch of date) h = Math.imul(h ^ ch.charCodeAt(0), 16777619)
+  return h >>> 0
+}
+export function dailyRules(date: string) {
+  const w = mkRng(dailySeed(date) ^ 0x51ed27)
+  const rules = shuffle(w, HEAT.filter(h => h.id !== 'timer').map(h => h.id)).slice(0, 2)
+  return { heat: Object.fromEntries(rules.map(id => [id, 1])) as Record<string, number>, cmd: pick(w, COMMANDERS).id }
+}
+export function newDaily(date: string): RunState {
+  const { heat, cmd } = dailyRules(date)
+  const s = newRun({ unlocked: [], heat }, dailySeed(date))
+  s.daily = date
+  s.cmdChoices = [cmd]
+  return s
+}
 const isCmd = (s: RunState, id: string) => s.cmd === id
 export const heatRank = (s: RunState, id: string) => Math.min(HEAT_RULE[id]?.max ?? 0, s.heat?.[id] ?? 0)
 // 위험도 '단단한 적': 전투를 만들 때 적 전체에 곱한다 (편성 배율은 그대로 두고 화면도 이 값을 곱해 보여 준다)
@@ -112,25 +153,25 @@ function decorate(s: RunState, w: Wave): Wave {
   if (s.sandbox) return w
   if (heatRank(s, 'affix') && w.kind === 'normal' && s.round >= 6) {
     const plain = w.spawns.filter(sp => !sp.aff && sp.tpl !== 'treasure')
-    for (const sp of shuffle(s.rng, plain).slice(0, s.round >= 11 ? 2 : 1)) sp.aff = pick(s.rng, AFFIXES).id
+    for (const sp of shuffle(W(s), plain).slice(0, s.round >= 11 ? 2 : 1)) sp.aff = pick(W(s), AFFIXES).id
   }
   if (heatRank(s, 'boss') && w.kind !== 'normal') w.spawns[0].mult *= 1.4
   if (s.curse && w.spawns.length) { for (const sp of w.spawns) sp.aff = s.curse; s.curse = undefined }
   return w
 }
-const nextWave = (s: RunState) => decorate(s, makeWave(s.round, s.rng, s.elites))
+const nextWave = (s: RunState) => decorate(s, makeWave(s.round, W(s), s.elites))
 
 // 방 → 이번 라운드 편성
 export const ELITE_ROOM = 2.4
 const ROOM_NAME: Record<DoorKind, string> = { fight: '전투', elite: '정예 조우', treasure: '보물 창고', shop: '떠돌이 상인', rest: '휴식처', event: '사건' }
 function roomWave(s: RunState, d: Door): Wave {
-  if (d.kind === 'treasure') return decorate(s, treasureWave(s.round, s.rng))
+  if (d.kind === 'treasure') return decorate(s, treasureWave(s.round, W(s)))
   if (PEACE.includes(d.kind)) return { label: d.kind === 'event' ? `사건 · ${EVENT[d.event!]?.name ?? '?'}` : ROOM_NAME[d.kind], kind: 'normal', spawns: [] }
   const w = nextWave(s)
   if (d.kind === 'elite' && w.kind === 'normal') {
     // 정예 조우: 적 전원 ×2.4, 둘에 접두사. 이기면 골드 증강체 하나를 더 고른다 (전리품은 일반 등급)
     for (const sp of w.spawns) sp.mult *= ELITE_ROOM
-    for (const sp of shuffle(s.rng, w.spawns.filter(x => !x.aff && x.tpl !== 'treasure')).slice(0, 2)) sp.aff = pick(s.rng, AFFIXES).id
+    for (const sp of shuffle(W(s), w.spawns.filter(x => !x.aff && x.tpl !== 'treasure')).slice(0, 2)) sp.aff = pick(W(s), AFFIXES).id
     Object.assign(w, { kind: 'elite', label: '정예 조우 · ' + w.label.split(' · ').pop(), hint: '정예 조우: 이기면 증강체를 하나 더 고른다' + (w.hint ? ' · ' + w.hint : '') })
   }
   return w
@@ -157,20 +198,23 @@ export const cellXY = (cell: number, side: Side) => {
   return { x: side === 0 ? 0.7 + c : 6.3 + c, y: 0.5 + (cell % ROWS) }
 }
 
-export function newRun(meta: { unlocked: string[]; heat?: Record<string, number> }, seed = Date.now()): RunState {
+export function newRun(meta: { unlocked: string[]; heat?: Record<string, number> }, seed = randomSeed()): RunState {
   const u = meta.unlocked
   const heat = { ...(meta.heat ?? {}) }
   const lives = Math.max(1, 3 + (u.includes('life') ? 1 : 0) - (heat.lives ? 1 : 0))
-  const rng = mkRng(seed)
-  const elites = pickElites(rng)
+  seed >>>= 0
+  // 난수 흐름 셋 (Slay the Spire처럼): 상점·전리품 / 세계(편성·문·사건·사령관) / 증강체.
+  // 상점을 몇 번 돌리든 같은 시드면 같은 적·같은 문이 나온다.
+  const rng = mkRng(seed), wrng = mkRng(seed ^ 0x9e3779b9), arng = mkRng(seed ^ 0x85ebca6b)
+  const elites = pickElites(wrng)
   const s: RunState = {
-    rng, round: 1, lives, maxLives: lives, gold: 6 + (u.includes('gold') ? 3 : 0), elites, heat,
-    units: [], nextId: 1, xp: 0, shop: [], shopSize: (u.includes('shop6') ? 6 : 5) - (heat.shop ? 1 : 0), wave: makeWave(1, rng, elites),
+    rng, wrng, arng, seed, round: 1, lives, maxLives: lives, gold: 6 + (u.includes('gold') ? 3 : 0), elites, heat,
+    units: [], nextId: 1, xp: 0, shop: [], shopSize: (u.includes('shop6') ? 6 : 5) - (heat.shop ? 1 : 0), wave: makeWave(1, wrng, elites),
     augments: [], items: [], queue: [], augChoices: [], rewardChoices: [],
     augRerolls: 1 + (u.includes('augroll') ? 1 : 0), freeRerolls: 0, bonusSlots: 0, pity: 0, after: false,
     unlocked: [...u], stats: { won: 0, elite: 0, bestHit: 0, fresh: 0 }, over: null, last: null, newRes: [], notes: [],
   }
-  s.cmdChoices = shuffle(rng, COMMANDERS.map(c => c.id)).slice(0, 3)
+  s.cmdChoices = shuffle(wrng, COMMANDERS.map(c => c.id)).slice(0, 3)
   s.queue.push('commander')
   rollShop(s)
   if (u.includes('startaug')) s.queue.push('augment') // 사령관을 고른 뒤 굴린다 (예언자·공명술사)
@@ -186,7 +230,7 @@ export function pickCmd(s: RunState, id: string) {
   if (id === 'lord') { s.bonusSlots++; s.lives--; s.maxLives-- }
   if (id === 'resonator') {
     const open = (a: string) => !AUG[a].locked || s.unlocked.includes('a_' + a)
-    s.promise = pick(s.rng, RESONANCES.filter(x => x.pair.every(open))).id
+    s.promise = pick(W(s), RESONANCES.filter(x => x.pair.every(open))).id
   }
   s.queue.shift()
   if (s.queue[0] as string === 'augment') { rollAugs(s); if (!s.augChoices.length) s.queue.shift() }
@@ -477,11 +521,11 @@ function queuePath(s: RunState) {
   if (r >= 3) w.push(['elite', 1], ['shop', 1])
   if (r >= 4) w.push(['rest', s.lives < s.maxLives ? 1.6 : 0.8])
   const kinds: DoorKind[] = []
-  while (kinds.length < 3) kinds.push(pickW(s.rng, w.filter(([k]) => !kinds.includes(k)), x => x[1])[0])
+  while (kinds.length < 3) kinds.push(pickW(W(s), w.filter(([k]) => !kinds.includes(k)), x => x[1])[0])
   if (!kinds.some(k => k === 'fight' || k === 'elite' || k === 'treasure')) kinds[2] = 'fight' // 싸울 문은 늘 하나 이상
   s.paths = kinds.map((k): Door => {
-    if (k === 'fight') return { kind: k, bonus: pick(s.rng, [{ k: 'gold', n: 3 + Math.ceil(r * 0.5) }, { k: 'item' }, { k: 'xp', n: 4 }, { k: 'reroll', n: 3 }] as Bonus[]) }
-    if (k === 'event') return { kind: k, event: pick(s.rng, EVENTS).id }
+    if (k === 'fight') return { kind: k, bonus: pick(W(s), [{ k: 'gold', n: 3 + Math.ceil(r * 0.5) }, { k: 'item' }, { k: 'xp', n: 4 }, { k: 'reroll', n: 3 }] as Bonus[]) }
+    if (k === 'event') return { kind: k, event: pick(W(s), EVENTS).id }
     return { kind: k }
   })
   s.queue.push('path')
@@ -508,9 +552,9 @@ export function leaveRoom(s: RunState) {
 function rollOffers(s: RunState) {
   const aug = AUGMENTS.filter(a => a.rarity < 3 && !has(s, a.id) && !a.crest && (!a.locked || s.unlocked.includes('a_' + a.id)))
   s.offers = [
-    ...shuffle(s.rng, [...ITEMS]).slice(0, 2).map((it): Offer => ({ kind: 'item', id: it.id, price: 4 })),
-    { kind: 'item', id: pick(s.rng, COMBOS).id, price: 10 },
-    ...(aug.length ? [{ kind: 'aug', id: pick(s.rng, aug).id, price: 12 } as Offer] : []),
+    ...shuffle(W(s), [...ITEMS]).slice(0, 2).map((it): Offer => ({ kind: 'item', id: it.id, price: 4 })),
+    { kind: 'item', id: pick(W(s), COMBOS).id, price: 10 },
+    ...(aug.length ? [{ kind: 'aug', id: pick(W(s), aug).id, price: 12 } as Offer] : []),
   ]
 }
 
@@ -585,7 +629,7 @@ function queueAug(s: RunState, kind: 'augment' | 'goldaug' = 'augment') {
 export function goEndless(s: RunState) {
   if (s.over !== 'win' || s.endless || s.sandbox) return
   s.endless = { won: s.stats.won, elite: s.stats.elite, fresh: s.stats.fresh }
-  s.elites = { ...(s.elites ?? {}), ...endlessElites(s.rng) }
+  s.elites = { ...(s.elites ?? {}), ...endlessElites(W(s)) }
   s.over = null
   s.after = true
   s.queue.push('reward')
@@ -638,13 +682,13 @@ export function rollAugs(s: RunState) {
   if (promised) out.push(promised)
   // 한 칸은 지금 빌드에 맞는 것 (공명 상대 / 주력 특성) → 운보다 계획
   const fits = pool.filter(a => !out.includes(a) && (formsRes(s, a.id) || a.fit?.some(t => top.slice(0, 2).includes(t))))
-  if (fits.length) out.push(pickW(s.rng, fits, w))
+  if (fits.length) out.push(pickW(A(s), fits, w))
   while (out.length < n) {
     const rest = pool.filter(a => !out.includes(a))
     if (!rest.length) break
-    out.push(pickW(s.rng, rest, w))
+    out.push(pickW(A(s), rest, w))
   }
-  s.augChoices = shuffle(s.rng, out.map(a => a.id))
+  s.augChoices = shuffle(A(s), out.map(a => a.id))
 }
 
 export function rerollAugs(s: RunState) {

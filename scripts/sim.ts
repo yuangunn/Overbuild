@@ -327,8 +327,8 @@ console.log('\n[1h] ★3 진화')
 {
   const fired: string[] = [], better: string[] = []
   for (const [id, e] of Object.entries(EVOS)) {
-    const evo = run(vs(setup(10, [[id, 3, [e.item]]]), 'brute', 6, 4), 20)
-    const plain = run(vs(setup(10, [[id, 3]]), 'brute', 6, 4), 20)
+    const evo = run(vs(setup(10, [[id, 3, [e.item]]]), 'brute', 3, 2), 20)
+    const plain = run(vs(setup(10, [[id, 3]]), 'brute', 3, 2), 20)
     const f = of(evo, id)
     if (f.tpl.skillName === e.name && (f.st.casts ?? 0) > 0) fired.push(id)
     if (evo.fighters.filter(x => x.side === 1 && !x.alive).length >= plain.fighters.filter(x => x.side === 1 && !x.alive).length) better.push(id)
@@ -406,6 +406,39 @@ console.log('\n[1i] 갈림길·방·사건')
   const g = R.newRun({ unlocked: [] }, 5); g.queue = []; g.augments = ['vamp', 'echo']; end(g, 2)
   g.paths = [{ kind: 'event', event: 'gambler' }]; R.pickPath(g, 0); R.eventPick(g, 0)
   ok(!g.augments.includes('vamp') && g.augments.includes('echo') && g.queue[0] === 'augment' && g.augChoices.every(a => AUG[a].rarity === 3), '도박꾼: 가장 낮은 등급을 잃고 프리즘 선택')
+}
+
+// ───────────────────────── 1j. 시드·일일 도전
+console.log('\n[1j] 시드·일일 도전')
+{
+  const codes = [0, 1, 123456789, 2 ** 32 - 1].map(n => R.seedCode(n))
+  ok(codes.every((c, i) => R.parseSeed(c) === [0, 1, 123456789, 2 ** 32 - 1][i]) && R.parseSeed('3f7k-q2m') === R.parseSeed('3F7KQ2M') && R.parseSeed('ZZZZZZZZ') === null && R.parseSeed('!!') === null,
+    `시드 코드 왕복 (${codes[2]}), 소문자·하이픈 허용, 잘못된 코드는 거절`)
+  // 같은 시드: 한쪽만 상점을 5번 돌려도 사령관 후보·정예·다음 갈림길·다음 적이 같다
+  const play = (rolls: number) => {
+    const s = R.newRun({ unlocked: [] }, 4242)
+    const cmds = s.cmdChoices!.join()
+    R.pickCmd(s, s.cmdChoices![0])
+    s.gold = 20
+    for (let i = 0; i < rolls; i++) R.reroll(s)
+    s.units = [{ id: 900, tpl: 'bear', star: 3, items: ['sword', 'helm', 'charm'], pos: 9, bonus: 5 }]
+    R.endBattle(s, R.buildBattle(s))
+    while (R.isAugQ(s.queue[0]) || s.queue[0] === 'reward') s.queue[0] === 'reward' ? R.pickReward(s, 0) : R.pickAug(s, s.augChoices[0])
+    const doors = s.paths!.map(d => d.kind + (d.event ?? '')).join()
+    R.pickPath(s, s.paths!.findIndex(d => d.kind === 'fight' || d.kind === 'elite' || d.kind === 'treasure'))
+    return { cmds, elites: JSON.stringify(s.elites), doors, wave: s.wave.spawns.map(sp => sp.tpl + sp.cell).join() }
+  }
+  const a = play(0), b = play(5)
+  ok(a.cmds === b.cmds && a.elites === b.elites && a.doors === b.doors && a.wave === b.wave, `같은 시드면 상점을 돌려도 세계는 같다 (문 ${a.doors})`)
+  const d1 = R.newDaily('2026-11-17'), d2 = R.newDaily('2026-11-17'), d3 = R.newDaily('2026-11-18')
+  ok(d1.seed === d2.seed && JSON.stringify(d1.heat) === JSON.stringify(d2.heat) && d1.cmdChoices!.length === 1 && !d1.unlocked.length && Object.keys(d1.heat!).length === 2 && d1.seed !== d3.seed,
+    `일일 도전: 날짜마다 같은 시드·위험도 2개(${Object.keys(d1.heat!).join(', ')})·사령관 1명, 해금 없음`)
+  const m: M.Meta = { ...M.loadMeta(), daily: null }
+  const fin = (round: number, win: boolean) => { const x = R.newDaily('2026-11-17'); x.round = round; x.over = win ? 'win' : 'lose'; x.lives = 1; M.settle(m, x) }
+  fin(9, false); fin(12, false); fin(7, false)
+  ok(m.daily?.round === 12 && m.daily.tries === 3 && !m.daily.win, '일일 기록은 같은 날 가장 좋은 결과, 시도 횟수')
+  fin(15, true)
+  ok(m.daily?.win === true && m.daily.tries === 4, '클리어하면 클리어가 최고 기록')
 }
 
 // ───────────────────────── 2. 사기 빌드 (15라운드 보스)

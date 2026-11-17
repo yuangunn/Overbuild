@@ -99,6 +99,7 @@ function titleScreen() {
       <div class="row">
         <button data-act="meta">${ic('shard')} 영구 성장 <b class="gold">${meta.shards}</b></button>
         <button data-act="codex">${ic('codex')} 도감 · 공명 ${meta.found.length}/${RESONANCES.length}</button>
+        <button data-act="daily">${ic('timewarp')} 일일 도전 ${dailyStatus()}</button>
         <button data-act="sandbox">${ic('train')} 샌드박스</button>
         <button data-act="heroes">${sprHTML('bladedancer', '', 'mini', 0)} 나만의 영웅 ${heroes.length}</button>
       </div>
@@ -127,6 +128,18 @@ function metaScreen() {
   </div>`
 }
 
+// 일일 도전: 오늘 날짜(현지 시각)
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+const dayLabel = (date: string) => date.slice(5).replace('-', '/')
+const resultText = (r: { round: number; win: boolean; lives: number }) => (r.win ? `클리어 (생명 ${r.lives})` : `${r.round}라운드`)
+function dailyStatus() {
+  const d = meta.daily?.date === today() ? meta.daily : null
+  return d ? `<b class="gold">${resultText(d)}</b>` : `<span class="dim">${dayLabel(today())}</span>`
+}
+function shareText(s: R.RunState) {
+  return `오버빌드 일일 도전 ${s.daily} · ${resultText({ round: s.round, win: s.over === 'win', lives: s.lives })} · ${s.cmd ? CMD[s.cmd].name : ''}${s.augments.length ? ` · 증강체 ${s.augments.map(a => AUG[a].name).join('/')}` : ''} · 최대 일격 ${fmt(s.stats.bestHit)}`
+}
+
 // 위험도 계약 (Hades 형벌 계약처럼 원하는 규칙만 골라 어렵게, 그만큼 보상)
 function pactScreen() {
   const heat = heatOf(meta.heat)
@@ -142,6 +155,9 @@ function pactScreen() {
         <span class="pips">${Array.from({ length: h.max }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('')}</span></div>`
     }).join('')}</div>
     <div class="row"><button class="primary big" data-act="new">${ic('wave', 32)} 위험도 ${heat}로 출발</button>${heat ? '<button class="ghost" data-act="pactClear">모두 끄기</button>' : ''}</div>
+    <h2 class="sub">시드</h2>
+    <p class="dim">친구와 같은 시드로 시작하면 같은 사령관 후보·같은 적·같은 갈림길이 나옵니다 (Balatro 시드처럼). 상점과 증강체는 고른 대로 갈라집니다.</p>
+    <div class="row seedrow"><input type="text" id="seed-in" maxlength="9" placeholder="예: 3F7K-Q2M" spellcheck="false"><button data-act="seedStart">이 시드로 출발 (위험도 ${heat})</button></div>
   </div>`
 }
 
@@ -174,7 +190,7 @@ function runScreen(s: R.RunState) {
   return `<div class="run ${battle ? 'fighting' : ''} ${sb ? 'sandbox' : ''}">
     <header class="top">
       <div class="brand">OVER<b>BUILD</b></div>
-      ${sb ? sandTop(s) : `<div class="pill ${s.endless ? 'endless' : ''}">${s.endless ? `무한 원정 <b>${s.round}</b>R` : `라운드 <b>${s.round}</b>/${R.MAX_ROUND}`}</div>
+      ${sb ? sandTop(s) : `${s.daily ? `<div class="pill daily" data-tip="z:">일일 ${dayLabel(s.daily)}</div>` : ''}<div class="pill ${s.endless ? 'endless' : ''}" data-tip="z:">${s.endless ? `무한 원정 <b>${s.round}</b>R` : `라운드 <b>${s.round}</b>/${R.MAX_ROUND}`}</div>
       <div class="pill wave ${s.wave.kind}">${ic(s.wave.kind === 'normal' ? 'wave' : s.wave.kind)} ${s.wave.label}</div>
       ${nextElite(s)}${cmdPill(s)}${heatOf(s.heat) ? `<div class="pill warn" data-tip="h:">${ic('elite')}위험도 ${heatOf(s.heat)}</div>` : ''}
       <div class="pill lives" title="생명">${ic('heart').repeat(Math.max(0, s.lives))}${ic('heart0').repeat(Math.max(0, s.maxLives - s.lives))}</div>
@@ -339,7 +355,7 @@ function summaryModal(s: R.RunState) {
 function cmdModal(s: R.RunState) {
   return `<div class="modal"><div class="box pick">
     <h2>사령관 선택</h2>
-    <p class="dim">이번 원정을 이끌 사령관을 고르세요. 원정마다 여덟 명 중 셋이 나옵니다.</p>
+    <p class="dim">${s.daily ? `일일 도전 ${s.daily}: 오늘의 사령관과 위험도 ${heatOf(s.heat)}가 정해져 있습니다. 영구 해금 없이 모두 같은 조건입니다.` : '이번 원정을 이끌 사령관을 고르세요. 원정마다 여덟 명 중 셋이 나옵니다.'}</p>
     <div class="aug-cards">${(s.cmdChoices ?? []).map(id => {
       const c = CMD[id]
       return `<div class="aug-card cmd" data-act="pickCmd" data-id="${id}"><div class="rar">${c.active ? `능력 · 라운드마다 ${c.active.cost}골드` : '패시브'}</div>
@@ -461,10 +477,13 @@ function endModal(s: R.RunState) {
 
     <div class="endstats">${s.cmd ? `<span>${sprHTML('cmd_' + s.cmd, '', 'mini', 0)}${CMD[s.cmd].name}</span>` : ''}<span>승리 <b>${s.stats.won}</b></span><span>정예 <b>${s.stats.elite}</b></span><span>최대 일격 <b>${fmt(s.stats.bestHit)}</b></span></div>
     <div class="aug-line">${s.augments.map(id => `<span data-tip="a:${id}">${augIc(id, 32)}</span>`).join('')}${R.activeRes(s).map(r => `<span class="res" data-tip="r:${r.id}">${augIc(r.id, 32)}</span>`).join('')}</div>
+    ${s.daily ? `<p class="gold">일일 도전 ${s.daily} · 오늘 최고 ${meta.daily?.date === s.daily ? resultText(meta.daily) : '-'} (${meta.daily?.tries ?? 1}번째)</p>
+      <div class="row seedrow"><input type="text" id="share" readonly value="${shareText(s).replace(/"/g, '')}"><button data-act="share">결과 복사</button></div>` : ''}
+    ${s.seed != null ? `<p class="dim small">시드 ${R.seedCode(s.seed)}</p>` : ''}
     <div class="shards">${ic('shard', 32)} +${earned} 별조각 <span class="dim">${heatOf(s.heat) ? `위험도 ${heatOf(s.heat)} ×${shardMult(heatOf(s.heat)).toFixed(1)} · ` : ''}(보유 ${meta.shards})</span></div>
     ${next.length ? `<p class="gold">지금 해금할 수 있는 것 ${next.length}개 · ${next.slice(0, 3).map(u => u.name).join(', ')}${next.length > 3 ? ' …' : ''}</p>` : ''}
     ${win ? `<button class="primary big" data-act="endless">${ic('wave', 32)} 무한 원정 계속</button><p class="dim small">이 빌드 그대로 16라운드부터. 적은 라운드마다 25%씩 강해지고 방어력과 접두사가 쌓입니다. 끝나면 그 뒤 몫만큼 별조각을 더 받습니다.</p>` : ''}
-    <div class="row"><button class="${win ? '' : 'primary'} big" data-act="new">한 판 더!</button><button data-act="meta">${ic('shard')} 영구 성장</button><button data-act="title">타이틀</button></div>
+    <div class="row">${s.daily ? '<button class="big" data-act="daily">일일 도전 다시</button>' : ''}<button class="${win ? '' : 'primary'} big" data-act="new">한 판 더!</button><button data-act="meta">${ic('shard')} 영구 성장</button><button data-act="title">타이틀</button></div>
   </div></div>`
 }
 
@@ -526,6 +545,7 @@ function tipHTML(key: string): string {
       ${d.tiers.map((n, i) => `<div class="${sy && sy.tier > i ? 'good' : 'dim'}">(${n}) ${d.desc[i]}</div>`).join('')}
       <div class="small who-list">${who.map(t => sprHTML(t.id, t.emoji, 'mini', 0) + t.name).join(' ')}</div>`
   }
+  if (k === 'z' && run) return `<div class="tip-h"><b>${run.daily ? `일일 도전 ${run.daily}` : '원정'}</b></div><div>시드 <b class="gold">${run.seed != null ? R.seedCode(run.seed) : '없음'}</b></div>${run.daily ? '<div class="dim small">오늘 날짜로 정해진 사령관·위험도·적. 영구 해금 없이 모두 같은 조건</div>' : '<div class="dim small">위험도 화면에서 이 시드로 다시 시작할 수 있습니다</div>'}`
   if (k === 'h' && run) {
     const on = HEAT.filter(h => R.heatRank(run!, h.id))
     return `<div class="tip-h">${ic('elite', 32)} <b>위험도 ${heatOf(run.heat)}</b> <span class="gold">별조각 ×${shardMult(heatOf(run.heat)).toFixed(1)}</span></div>${on.map(h => `<div><b>${h.name}</b> <span class="dim">${h.desc(R.heatRank(run!, h.id))}</span></div>`).join('')}`
@@ -577,10 +597,10 @@ function toast(msg: string, big = false) {
 }
 
 // ───────────────────────── 흐름
-function startNew() {
+function startNew(s?: R.RunState) {
   player?.stop()
   battle = null
-  run = R.newRun(meta) // 고른 위험도(meta.heat)를 그대로 건다
+  run = s ?? R.newRun(meta) // 고른 위험도(meta.heat)를 그대로 건다
   sel = {}
   showSummary = false
   screen = 'run'
@@ -725,6 +745,20 @@ function act(name: string, el?: HTMLElement) {
     case 'sAugClear': if (run?.sandbox && !battle) run.augments = []; break
     case 'meta': screen = 'meta'; break
     case 'pact': screen = 'pact'; break
+    case 'daily': leaveSandbox(); startNew(R.newDaily(today())); break
+    case 'seedStart': {
+      const v = ($app.querySelector('#seed-in') as HTMLInputElement | null)?.value ?? ''
+      const n = R.parseSeed(v)
+      if (n === null) { toast('시드는 숫자·영문 7글자입니다 (예: 3F7K-Q2M)'); return }
+      leaveSandbox(); startNew(R.newRun(meta, n))
+    } break
+    case 'share': {
+      const el = $app.querySelector<HTMLInputElement>('#share')
+      if (!el) return
+      el.select()
+      navigator.clipboard?.writeText(el.value).then(() => toast('결과를 복사했습니다'), () => toast('복사하지 못했습니다 — 글자를 직접 선택해 복사하세요'))
+      return
+    }
     case 'pactRule': {
       const h = HEAT_RULE[d.id!]
       const n = ((meta.heat[h.id] ?? 0) + 1) % (h.max + 1)
