@@ -21,6 +21,7 @@ type Spec = [tpl: string, star: number, items?: string[]]
 function setup(round: number, board: Spec[], augs: string[] = [], seed = 1): R.RunState {
   const s = R.newRun({ unlocked: ALL }, seed)
   s.round = round
+  s.xp = R.XP_PER_ROUND * (round - 1)
   s.wave = makeWave(round, s.rng)
   s.units = []
   s.bonusSlots = 12

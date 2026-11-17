@@ -19,8 +19,8 @@ function power(b: Battle, side: Side) {
   return { ehp, dps }
 }
 
-interface Row { n: number; win: number; t: number[]; margin: number[]; ot: number; ratio: number[]; gold: number[]; board: number[]; star: number[]; augs: number[]; foeDmg: Record<string, number> }
-const row = (): Row => ({ n: 0, win: 0, t: [], margin: [], ot: 0, ratio: [], gold: [], board: [], star: [], augs: [], foeDmg: {} })
+interface Row { n: number; win: number; t: number[]; margin: number[]; ot: number; ratio: number[]; gold: number[]; board: number[]; lv: number[]; star: number[]; augs: number[]; foeDmg: Record<string, number> }
+const row = (): Row => ({ n: 0, win: 0, t: [], margin: [], ot: 0, ratio: [], gold: [], board: [], lv: [], star: [], augs: [], foeDmg: {} })
 const avg = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0)
 const pct = (a: number[], p: number) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(s.length * p))] : 0 }
 
@@ -39,6 +39,7 @@ function play(smart: boolean, unlocked: string[]) {
       const x = (rows[r] ??= row())
       x.gold.push(s.gold)
       x.board.push(R.boardOf(s).length)
+      x.lv.push(R.levelOf(s.xp).lv)
       x.star.push(avg(R.boardOf(s).map(u => u.star)))
       x.augs.push(s.augments.length)
       const b = R.buildBattle(s)
@@ -66,10 +67,10 @@ for (const [smart, unlocked, name] of [[false, [], '무작위 봇 · 해금 없�
   const { rows, ends, clears, lives, enc } = play(smart, [...unlocked])
   console.log(`\n■ ${name} — ${N}판, 클리어 ${clears} (${Math.round((clears / N) * 100)}%), 클리어 때 남은 생명 평균 ${f1(lives / Math.max(1, clears))}`)
   console.log(`  종료: ${Object.entries(ends).map(([k, v]) => `${k}:${v}`).join(' ')}`)
-  console.log('  R   시도  승률   전투(평균/p90)  30초+  여유(승자 남은 체력)  전력비(중앙)  골드  배치  ★평균  증강  가장 아픈 적')
+  console.log('  R   시도  승률   전투(평균/p90)  30초+  여유(승자 남은 체력)  전력비(중앙)  골드  배치  Lv   ★평균  증강  가장 아픈 적')
   for (const [r, x] of Object.entries(rows)) {
     const top = Object.entries(x.foeDmg).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k, v]) => `${k} ${Math.round((v / x.n) | 0)}`).join(', ')
-    console.log(`  ${r.padStart(2)}  ${String(x.n).padStart(4)}  ${String(Math.round((x.win / x.n) * 100)).padStart(3)}%   ${f1(avg(x.t)).padStart(5)} / ${f1(pct(x.t, 0.9)).padStart(5)}   ${String(Math.round((x.ot / x.n) * 100)).padStart(3)}%   ${String(Math.round(avg(x.margin) * 100)).padStart(3)}%                 ${f1(pct(x.ratio, 0.5)).padStart(6)}     ${f1(avg(x.gold)).padStart(4)}  ${f1(avg(x.board)).padStart(4)}  ${avg(x.star).toFixed(2)}  ${f1(avg(x.augs))}   ${top}`)
+    console.log(`  ${r.padStart(2)}  ${String(x.n).padStart(4)}  ${String(Math.round((x.win / x.n) * 100)).padStart(3)}%   ${f1(avg(x.t)).padStart(5)} / ${f1(pct(x.t, 0.9)).padStart(5)}   ${String(Math.round((x.ot / x.n) * 100)).padStart(3)}%   ${String(Math.round(avg(x.margin) * 100)).padStart(3)}%                 ${f1(pct(x.ratio, 0.5)).padStart(6)}     ${f1(avg(x.gold)).padStart(4)}  ${f1(avg(x.board)).padStart(4)}  ${f1(avg(x.lv))}  ${avg(x.star).toFixed(2)}  ${f1(avg(x.augs))}   ${top}`)
   }
   console.log('  편성별: ' + Object.entries(enc).sort((a, b) => a[1].win / a[1].n - b[1].win / b[1].n).map(([k, e]) => `${k} ${e.n}회 ${Math.round((e.win / e.n) * 100)}% ${f1(avg(e.t))}초${e.caught + e.fled ? ` 보물 ${e.caught}/${e.caught + e.fled}` : ''}`).join(' | '))
 }

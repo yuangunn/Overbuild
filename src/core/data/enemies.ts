@@ -237,7 +237,7 @@ export function applyAffix(f: Fighter, id: string) {
 }
 
 // ponytail: 난이도 곡선은 이 한 줄. scripts/levels.ts 라운드별 통계를 보고 조절.
-export const enemyMult = (r: number) => 1 + 0.3 * (r - 1) + 0.03 * (r - 1) ** 2
+export const enemyMult = (r: number) => 1 + 0.3 * (r - 1) + 0.035 * (r - 1) ** 2
 
 export const ZONE = ['고블린 숲', '망자의 폐허', '심연의 문']
 const COUNT = [2, 3, 3, 4, 0, 4, 5, 5, 6, 0, 6, 7, 7, 8, 0]

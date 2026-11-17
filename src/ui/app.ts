@@ -16,7 +16,7 @@ import { version } from '../../package.json'
 type Screen = 'title' | 'run' | 'meta' | 'codex' | 'heroes'
 
 let meta = M.loadMeta()
-let run: R.RunState | null = M.loadRun()
+let run: R.RunState | null = (r => r && R.fixRun(r))(M.loadRun())
 let screen: Screen = 'title'
 let battle: Battle | null = null
 let player: Player | null = null
@@ -187,7 +187,8 @@ function runScreen(s: R.RunState) {
       <div class="shop" data-drop="sell">
         <div class="lbl">상점 ${selU ? `<button class="sell" data-act="sell">${UNIT[selU.tpl].name} 판매 +${R.sellValue(selU)}${ic('coin')}</button>` : '<span class="dim small">유닛을 여기로 끌어오면 판매</span>'}</div>
         <div class="cards">${s.shop.map((id, i) => shopCard(s, id, i)).join('')}
-          <button class="reroll" data-act="reroll" ${s.gold < 1 && !s.freeRerolls ? 'disabled' : ''}>새로고침<span>${s.freeRerolls ? '무료' : `1${ic('coin')}`}</span><kbd>D</kbd></button>
+          <div class="shopbtns">${xpButton(s)}
+          <button class="reroll" data-act="reroll" ${s.gold < 1 && !s.freeRerolls ? 'disabled' : ''}>새로고침<span>${s.freeRerolls ? '무료' : `1${ic('coin')}`}</span><kbd>D</kbd></button></div>
         </div>
       </div>
     </footer>`}
@@ -237,11 +238,19 @@ function token(u: R.OwnedUnit) {
     ${u.items.length ? `<span class="its">${u.items.map(i => ic(i, 16, ITEM[i].emoji)).join('')}</span>` : ''}</div>`
 }
 
+// 지휘 레벨: 경험치를 사서 배치 칸과 상점 확률을 앞당긴다 (TFT의 경험치 구매, F 키도 같게)
+function xpButton(s: R.RunState) {
+  const { lv, cur, need } = R.levelOf(s.xp)
+  const max = lv >= R.MAX_LV
+  return `<button class="reroll xpbuy" data-act="buyXp" data-tip="l:" ${max || s.gold < R.BUY_XP ? 'disabled' : ''}>지휘 Lv${lv}
+    <i class="xpbar"><i style="width:${max ? 100 : (cur / need) * 100}%"></i></i><span>${max ? '최대' : `+${R.BUY_XP} · ${R.BUY_XP}${ic('coin')}`}</span><kbd>F</kbd></button>`
+}
+
 function shopCard(s: R.RunState, id: string | null, i: number) {
   if (!id) return '<div class="card empty"></div>'
   const t = UNIT[id]
   const own = s.units.filter(u => u.tpl === id && u.star === 1).length
-  return `<div class="card c${t.cost} ${s.gold < t.cost ? 'poor' : ''} ${own >= 2 ? 'merge' : ''}" data-act="buy" data-i="${i}" data-tip="t:${id}">
+  return `<div class="card c${t.cost} ${s.gold < t.cost || !R.canAdd(s, id) ? 'poor' : ''} ${own >= 2 ? 'merge' : ''}" data-act="buy" data-i="${i}" data-tip="t:${id}">
     <div class="cardspr">${sprHTML(t.id, t.emoji, '', 0)}</div><div class="nm">${t.name}</div>
     <div class="tr">${t.traits.map(x => `<span style="color:${TRAITS[x].color}">${ic(x)}${TRAITS[x].name}</span>`).join('')}</div>
     <div class="cost">${ic('coin')}${t.cost}</div>${own ? `<div class="own">${own >= 2 ? '★2 승급!' : `${own}/3`}</div>` : ''}
@@ -328,7 +337,8 @@ function rewardBody(r: R.Reward) {
   switch (r.kind) {
     case 'unit': {
       const t = UNIT[r.tpl]
-      return `<div class="rar">영입</div><div class="em">${sprHTML(t.id, t.emoji, 'big', 0)}</div><h3>${t.name} ${stars(r.star)}</h3><div class="fit">${traitChips(t)}</div><p>${t.skillName} — ${t.skillDesc}</p>`
+      const full = run && r.star === 1 && !R.canAdd(run, r.tpl) || run && r.star > 1 && R.benchOf(run).length >= R.BENCH && R.boardOf(run).length >= R.slotsOf(run)
+      return `<div class="rar">영입</div><div class="em">${sprHTML(t.id, t.emoji, 'big', 0)}</div><h3>${t.name} ${stars(r.star)}</h3><div class="fit">${traitChips(t)}</div><p>${t.skillName} — ${t.skillDesc}</p>${full ? `<p class="bad">대기석이 가득 차 받으면 ${t.cost * 3 ** (r.star - 1)}골드로 바뀝니다</p>` : ''}`
     }
     case 'gold': return `<div class="rar">보물</div><div class="em">${ic('gold', 64)}</div><h3>+${r.n} 골드</h3><p>상점을 더 돌리거나 비싼 유닛을 사세요.</p>`
     case 'item': return `<div class="rar">장비</div><div class="em">${r.ids.map(i => ic(i, r.ids.length > 1 ? 48 : 64, ITEM[i].emoji)).join('')}</div><h3>${r.ids.map(i => ITEM[i].name).join(' + ')}</h3><p>${r.ids.map(i => ITEM[i].desc).join('<br>')}</p>`
@@ -368,7 +378,7 @@ function tipHTML(key: string): string {
     const its = u.items.map(i => `<div class="tip-h">${ic(i)}${ITEM[i].name} <span class="dim">${ITEM[i].desc}</span></div>`).join('')
     return unitTip(UNIT[u.tpl], u.star, `${u.bonus ? `<div class="good">성장 +${Math.round(u.bonus * 100)}%</div>` : ''}${its}<div class="dim small">${run.sandbox ? '끌어서 옮기기 · 아래 칸으로 끌면 빠짐' : `판매 ${R.sellValue(u)}골드 · 클릭해서 선택`}</div>`)
   }
-  if (k === 't') return unitTip(UNIT[v], 1, '<div class="dim small">클릭해서 구매</div>')
+  if (k === 't') return unitTip(UNIT[v], 1, `<div class="dim small">${run && !R.canAdd(run, v) ? '<span class="bad">자리가 없습니다 — 대기석 유닛을 상점으로 끌어 판매</span>' : '클릭해서 구매'}</div>`)
   if (k === 'n') {
     const t = R.tplOf(v)
     if (!t) return ''
@@ -404,6 +414,13 @@ function tipHTML(key: string): string {
     return `<div class="tip-h">${ic(d.id, 32)} <b>${d.name}</b>${sy?.crest ? ' <span class="gold">문장: 효과 2배</span>' : ''}</div>
       ${d.tiers.map((n, i) => `<div class="${sy && sy.tier > i ? 'good' : 'dim'}">(${n}) ${d.desc[i]}</div>`).join('')}
       <div class="small who-list">${who.map(t => sprHTML(t.id, t.emoji, 'mini', 0) + t.name).join(' ')}</div>`
+  }
+  if (k === 'l' && run) {
+    const { lv } = R.levelOf(run.xp)
+    const row = (l: number) => `<tr class="${l === lv ? 'good' : 'dim'}"><td>Lv${l}</td><td>${l + 2}칸</td>${R.ODDS[l - 1].map(p => `<td>${p}%</td>`).join('')}</tr>`
+    return `<div class="tip-h">${ic('slot', 32)} <b>지휘 레벨 ${lv}</b> <span class="dim">경험치 ${run.xp}</span></div>
+      <div>라운드마다 경험치 ${R.XP_PER_ROUND}. ${R.BUY_XP}골드로 ${R.BUY_XP}를 더 사면 배치 칸이 늘고 비싼 유닛이 잘 나옵니다.</div>
+      <table class="odds"><tr class="dim"><td></td><td>배치</td><td>1골드</td><td>2골드</td><td>3골드</td></tr>${Array.from({ length: R.MAX_LV }, (_, i) => row(i + 1)).join('')}</table>`
   }
   if (k === 'i') { const it = ITEM[v]; return `<div class="tip-h">${ic(v, 32, it.emoji)} <b>${it.name}</b></div><div>${it.desc}</div>` }
   return ''
@@ -597,6 +614,7 @@ function act(name: string, el?: HTMLElement) {
       if (!s || battle) return
       if (name === 'buy') { const e = R.buy(s, +d.i!); if (e) toast(e) }
       else if (name === 'reroll') { const e = R.reroll(s); if (e) toast(e) }
+      else if (name === 'buyXp') { const e = R.buyXp(s); if (e) toast(e) }
       else if (name === 'sell' && sel.unit != null) { toast(`+${R.sell(s, sel.unit)} 골드`); sel = {} }
       else if (name === 'item') sel = sel.item === +d.i! ? {} : { item: +d.i! }
       else if (name === 'rerollAug') R.rerollAugs(s)
@@ -708,6 +726,7 @@ addEventListener('keydown', e => {
     if (showSummary) act('continue')
     else if (!modal(run)) act('fight')
   } else if (e.code === 'KeyD' && !modal(run) && !run.sandbox) act('reroll')
+  else if (e.code === 'KeyF' && !modal(run) && !run.sandbox) act('buyXp')
   else if (e.code === 'Escape') { sel = {}; brush = null; render() }
 })
 

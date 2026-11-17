@@ -7,6 +7,10 @@ export const val = (u: R.OwnedUnit) => UNIT[u.tpl].cost * 3 ** (u.star - 1)
 
 export function botTurn(s: R.RunState, smart: boolean) {
   const top = R.synergies(s).slice(0, 2).map(x => x.id)
+  // 지휘 레벨: 3라운드부터 골드 12 넘게 남으면 경험치를 산다 (배치 칸이 다 찬 경우만)
+  // 무작위 봇은 골드 10 넘으면 한 번만
+  if (smart) while (s.round >= 3 && s.gold >= 12 && R.boardOf(s).length >= R.slotsOf(s) && !R.buyXp(s)) { /* 산다 */ }
+  else if (!smart && s.gold >= 10) R.buyXp(s)
   // 구매: 겹치는 유닛 / 주력 특성 / 빈자리
   for (let pass = 0; pass < 6; pass++) {
     s.shop.forEach((id, i) => {

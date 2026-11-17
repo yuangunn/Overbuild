@@ -11,7 +11,18 @@ export const MAX_ROUND = 15
 export const AUG_ROUNDS = [1, 4, 7, 10, 13]
 export const BENCH = 8
 export const ROWS = 4
-const SLOTS = [3, 4, 4, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 8]
+// 지휘 레벨 (TFT의 경험치 구매): 라운드마다 경험치 2, 4골드로 4를 더 산다. 레벨 + 2 = 배치 칸.
+// 자동 경험치만으로는 라운드별 칸 3·4·4·5·5·6·6·6·7·7·7·8… 그대로이고, 사면 칸과 상점 확률을 앞당긴다.
+export const XP_STEP = [2, 4, 4, 6, 6, 20, 32] // Lv1→2 … Lv7→8 에 필요한 경험치
+export const MAX_LV = XP_STEP.length + 1
+export const BUY_XP = 4
+export const XP_PER_ROUND = 2
+export function levelOf(xp: number): { lv: number; cur: number; need: number } {
+  let lv = 1
+  for (const n of XP_STEP) { if (xp < n) return { lv, cur: xp, need: n }; xp -= n; lv++ }
+  return { lv, cur: 0, need: 0 }
+}
+const natXp = (round: number) => XP_PER_ROUND * (round - 1)
 
 export interface OwnedUnit { id: number; tpl: string; star: number; items: string[]; pos: number | null; bonus: number }
 
@@ -56,6 +67,7 @@ export interface RunState {
   pity: number // 패배 누적 → 다음 증강체 등급 상승
   after: boolean // 지금 고르는 게 전투 뒤 보상인지 (다 고르면 다음 라운드)
   unlocked: string[]
+  xp: number // 지휘 경험치 누적
   stats: { won: number; elite: number; bestHit: number; fresh: number }
   over: null | 'win' | 'lose'
   last: Summary | null
@@ -68,7 +80,7 @@ export interface RunState {
 const has = (s: RunState, id: string) => s.augments.includes(id)
 export const boardOf = (s: RunState) => s.units.filter(u => u.pos !== null)
 export const benchOf = (s: RunState) => s.units.filter(u => u.pos === null)
-export const slotsOf = (s: RunState) => Math.min(12, SLOTS[Math.min(s.round, MAX_ROUND) - 1] + s.bonusSlots)
+export const slotsOf = (s: RunState) => Math.min(12, levelOf(s.xp).lv + 2 + s.bonusSlots)
 // 유닛·적·나만의 영웅을 한 이름으로 찾는다 (영웅은 heroes.ts가 UNIT에 등록)
 export const tplOf = (id: string): UnitTpl | undefined => UNIT[id] ?? ENEMIES[id]
 export const sellValue = (u: OwnedUnit) => UNIT[u.tpl].cost * 3 ** (u.star - 1)
@@ -88,7 +100,7 @@ export function newRun(meta: { unlocked: string[] }, seed = Date.now()): RunStat
   const elites = pickElites(rng)
   const s: RunState = {
     rng, round: 1, lives, maxLives: lives, gold: 6 + (u.includes('gold') ? 3 : 0), elites,
-    units: [], nextId: 1, shop: [], shopSize: u.includes('shop6') ? 6 : 5, wave: makeWave(1, rng, elites),
+    units: [], nextId: 1, xp: 0, shop: [], shopSize: u.includes('shop6') ? 6 : 5, wave: makeWave(1, rng, elites),
     augments: [], items: [], queue: [], augChoices: [], rewardChoices: [],
     augRerolls: 1 + (u.includes('augroll') ? 1 : 0), freeRerolls: 0, bonusSlots: 0, pity: 0, after: false,
     unlocked: [...u], stats: { won: 0, elite: 0, bestHit: 0, fresh: 0 }, over: null, last: null, newRes: [], notes: [],
@@ -98,11 +110,28 @@ export function newRun(meta: { unlocked: string[] }, seed = Date.now()): RunStat
   return s
 }
 
-// ── 상점
-const ODDS = (r: number) => (r <= 3 ? [75, 25, 0] : r <= 6 ? [50, 40, 10] : r <= 9 ? [35, 40, 25] : [22, 40, 38])
+// 예전 저장분에 없는 값 채우기
+export function fixRun(s: RunState): RunState {
+  s.xp ??= natXp(s.round)
+  return s
+}
+
+// ── 상점 (비용 1·2·3 확률, 지휘 레벨별)
+export const ODDS = [[75, 25, 0], [75, 25, 0], [50, 40, 10], [40, 40, 20], [30, 40, 30], [22, 40, 38], [15, 35, 50], [10, 30, 60]]
+
+export function buyXp(s: RunState): string | null {
+  if (levelOf(s.xp).lv >= MAX_LV) return '지휘 레벨이 최대입니다'
+  if (s.gold < BUY_XP) return '골드가 부족합니다'
+  const before = levelOf(s.xp).lv
+  s.gold -= BUY_XP
+  s.xp += BUY_XP
+  const lv = levelOf(s.xp).lv
+  if (lv > before) s.notes.push(`지휘 레벨 ${lv} — 배치 칸 ${slotsOf(s)}`)
+  return null
+}
 
 export function rollShop(s: RunState) {
-  const odds = ODDS(s.round)
+  const odds = ODDS[levelOf(s.xp).lv - 1]
   const pool = shopPool(s)
   s.shop = Array.from({ length: s.shopSize }, () => {
     const tier = pickW(s.rng, [1, 2, 3], t => odds[t - 1])
@@ -119,7 +148,7 @@ export function reroll(s: RunState): string | null {
 }
 
 const wouldMerge = (s: RunState, tpl: string) => s.units.filter(u => u.tpl === tpl && u.star === 1).length >= 2
-const canAdd = (s: RunState, tpl: string) =>
+export const canAdd = (s: RunState, tpl: string) =>
   boardOf(s).length < slotsOf(s) || benchOf(s).length < BENCH || wouldMerge(s, tpl)
 
 export function buy(s: RunState, i: number): string | null {
@@ -242,7 +271,7 @@ export function buildBattle(s: RunState): Battle {
   for (const id of s.augments) { const m = AUG[id]?.mod?.(hasX); if (m) mods.push(m) }
   for (const sy of synergies(s)) if (sy.tier) mods.push(TRAITS[sy.id].mod(sy.tier, sy.x))
   // 샌드박스는 칸 제한 없이 놓되, 고독한 영웅의 빈 칸 계산은 그 라운드의 칸 수 기준
-  const slots = s.sandbox ? Math.max(boardOf(s).length, SLOTS[s.round - 1]) : slotsOf(s)
+  const slots = s.sandbox ? Math.max(boardOf(s).length, levelOf(natXp(s.round)).lv + 2) : slotsOf(s)
   const b = new Battle([mods, []], Math.floor(rand(s.rng) * 2 ** 31), slots)
   for (const u of boardOf(s)) {
     const { x, y } = cellXY(u.pos!, 0)
@@ -313,6 +342,7 @@ function advance(s: RunState) {
   s.after = false
   const won = s.last?.win ?? true
   if (won || s.round < MAX_ROUND) s.round++ // 보스에게 지면 보스 재도전
+  s.xp += XP_PER_ROUND
   s.gold += income(s, won)
   s.freeRerolls = has(s, 'midas') ? 1 : 0
   s.wave = makeWave(s.round, s.rng, s.elites)

@@ -36,7 +36,7 @@ button.sell { border-image-source: url(./assets/ui/b1-gold.png) }
 kbd { font: 12px Galmuri11, monospace; color: var(--k); background: var(--lgrey); padding: 0 4px; margin-left: 4px; text-shadow: none; box-shadow: 0 2px 0 var(--grey) }
 
 /* ── 공통 */
-.dim { color: var(--dim) } .small { font-size: 12px } .gold { color: var(--gold) } .good { color: var(--green) }
+.dim { color: var(--dim) } .small { font-size: 12px } .gold { color: var(--gold) } .good { color: var(--green) } .bad { color: var(--red) }
 .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap }
 .ico { display: inline-block; flex: none; vertical-align: middle; background-repeat: no-repeat;
   width: var(--sz); height: var(--sz); background-size: calc(var(--sz) * var(--w)) calc(var(--sz) * var(--h));
@@ -164,6 +164,9 @@ kbd { font: 12px Galmuri11, monospace; color: var(--k); background: var(--lgrey)
 .card .own { position: absolute; top: -2px; left: 0; color: var(--yellow); font-weight: 700 }
 .reroll { flex-direction: column; gap: 0; min-width: 76px }
 .reroll span { display: flex; align-items: center; gap: 2px } .reroll kbd { margin: 2px 0 0 }
+.shopbtns { display: flex; flex-direction: column; gap: 4px } .shopbtns .reroll { flex: 1; min-height: 0; padding-top: 0; padding-bottom: 0 }
+.odds { border-collapse: collapse; margin-top: 4px } .odds td { padding: 0 6px 0 0; text-align: right } .odds td:first-child { text-align: left }
+.xpbar { display: block; width: 56px; height: 6px; background: var(--k); box-shadow: 0 0 0 1px var(--grey) } .xpbar i { display: block; height: 100%; background: var(--cyan) }
 
 .drag-ghost { transform: scale(1.1); transition: none }
 
