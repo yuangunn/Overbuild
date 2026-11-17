@@ -3,9 +3,10 @@ import { UNIT, UNITS, type TraitId, type UnitTpl } from './data/units.ts'
 import { AUG, AUGMENTS, RESONANCES, type AugDef, type PickCtx, type ResDef } from './data/augments.ts'
 import { ITEM, ITEMS } from './data/items.ts'
 import { TRAITS, TRAIT_IDS } from './data/traits.ts'
-import { ENEMIES, applyAffix, enemyMult, makeWave, pickElites, type Wave } from './data/enemies.ts'
+import { ENEMIES, applyAffix, endlessElites, enemyMult, makeWave, pickElites, type Wave } from './data/enemies.ts'
 import { Battle, STEP, type Mod, type Side } from './battle.ts'
 import { mkRng, pick, pickW, rand, shuffle, type Rng } from './rng.ts'
+import { CMD, COMMANDERS } from './data/commanders.ts'
 
 export const MAX_ROUND = 15
 export const AUG_ROUNDS = [1, 4, 7, 10, 13]
@@ -58,7 +59,7 @@ export interface RunState {
   wave: Wave
   augments: string[]
   items: string[]
-  queue: ('augment' | 'reward')[]
+  queue: ('commander' | 'augment' | 'reward')[]
   augChoices: string[]
   rewardChoices: Reward[]
   augRerolls: number
@@ -72,12 +73,18 @@ export interface RunState {
   over: null | 'win' | 'lose'
   last: Summary | null
   elites?: Record<number, string> // 라운드 → 정예·보스 (v0.2 저장분엔 없음 → 기본값)
+  endless?: { won: number; elite: number; fresh: number } // 무한 원정: 15R 클리어 때 통계 (그 뒤 몫만 정산)
   sandbox?: boolean
+  cmd?: string // 시작 사령관 (v0.3 저장분엔 없음 → 없이 진행)
+  cmdChoices?: string[]
+  cmdUsed?: boolean // 능력형 사령관: 이번 라운드에 썼는지
+  promise?: string // 공명술사: 약속한 공명 id (그 짝 중 아직 없는 쪽이 증강체 선택에 반드시 나온다)
   newRes: string[]
   notes: string[] // UI가 꺼내서 토스트로 보여준다
 }
 
 const has = (s: RunState, id: string) => s.augments.includes(id)
+const isCmd = (s: RunState, id: string) => s.cmd === id
 export const boardOf = (s: RunState) => s.units.filter(u => u.pos !== null)
 export const benchOf = (s: RunState) => s.units.filter(u => u.pos === null)
 export const slotsOf = (s: RunState) => Math.min(12, levelOf(s.xp).lv + 2 + s.bonusSlots)
@@ -105,9 +112,40 @@ export function newRun(meta: { unlocked: string[] }, seed = Date.now()): RunStat
     augRerolls: 1 + (u.includes('augroll') ? 1 : 0), freeRerolls: 0, bonusSlots: 0, pity: 0, after: false,
     unlocked: [...u], stats: { won: 0, elite: 0, bestHit: 0, fresh: 0 }, over: null, last: null, newRes: [], notes: [],
   }
+  s.cmdChoices = shuffle(rng, COMMANDERS.map(c => c.id)).slice(0, 3)
+  s.queue.push('commander')
   rollShop(s)
-  if (u.includes('startaug')) { s.queue.push('augment'); rollAugs(s) }
+  if (u.includes('startaug')) s.queue.push('augment') // 사령관을 고른 뒤 굴린다 (예언자·공명술사)
   return s
+}
+
+export function pickCmd(s: RunState, id: string) {
+  if (s.queue[0] !== 'commander' || !s.cmdChoices?.includes(id)) return
+  s.cmd = id
+  s.cmdChoices = []
+  if (id === 'seer') s.augRerolls++
+  if (id === 'smith') for (let i = 0; i < 2; i++) s.items.push(pick(s.rng, ITEMS).id)
+  if (id === 'lord') { s.bonusSlots++; s.lives--; s.maxLives-- }
+  if (id === 'resonator') {
+    const open = (a: string) => !AUG[a].locked || s.unlocked.includes('a_' + a)
+    s.promise = pick(s.rng, RESONANCES.filter(x => x.pair.every(open))).id
+  }
+  s.queue.shift()
+  if (s.queue[0] as string === 'augment') { rollAugs(s); if (!s.augChoices.length) s.queue.shift() }
+}
+
+// 능력형 사령관 (Hearthstone 전장의 영웅 능력처럼 라운드마다 한 번, 골드를 내고 쓴다)
+export function useCmd(s: RunState): string | null {
+  const a = s.cmd ? CMD[s.cmd]?.active : undefined
+  if (!a || s.queue.length) return null
+  if (s.cmdUsed) return '이번 라운드에 이미 썼습니다'
+  if (s.gold < a.cost) return '골드가 부족합니다'
+  const top = topTraits(s)[0]
+  if (!top) return '먼저 유닛을 모으세요'
+  s.gold -= a.cost
+  s.cmdUsed = true
+  rollShop(s, t => t.traits.includes(top))
+  return null
 }
 
 // 예전 저장분에 없는 값 채우기
@@ -130,12 +168,13 @@ export function buyXp(s: RunState): string | null {
   return null
 }
 
-export function rollShop(s: RunState) {
+export function rollShop(s: RunState, only?: (t: UnitTpl) => boolean) {
   const odds = ODDS[levelOf(s.xp).lv - 1]
-  const pool = shopPool(s)
+  const pool = shopPool(s).filter(t => !only || only(t))
   s.shop = Array.from({ length: s.shopSize }, () => {
     const tier = pickW(s.rng, [1, 2, 3], t => odds[t - 1])
-    return pick(s.rng, pool.filter(x => x.cost === tier)).id
+    const at = pool.filter(x => x.cost === tier)
+    return pick(s.rng, at.length ? at : pool).id
   })
 }
 
@@ -160,6 +199,10 @@ export function buy(s: RunState, i: number): string | null {
   s.gold -= t.cost
   s.shop[i] = null
   addUnit(s, id, 1)
+  if (isCmd(s, 'twin') && (t.cost === 1 || (t.cost === 2 && rand(s.rng) < 0.5))) {
+    if (canAdd(s, id)) addUnit(s, id, 1)
+    else s.notes.push('자리가 없어 쌍둥이를 받지 못했습니다')
+  }
   return null
 }
 
@@ -285,6 +328,7 @@ export function buildBattle(s: RunState): Battle {
     if (!t) continue
     const f = b.add(t, sp.star ?? 1, 1, x, y, sp.mult)
     if (sp.aff) applyAffix(f, sp.aff)
+    if (sp.armor) f.armor += sp.armor
   }
   b.start()
   return b
@@ -317,23 +361,41 @@ export function endBattle(s: RunState, b: Battle): Summary {
   if (win) {
     s.stats.won++
     if (kind !== 'normal') s.stats.elite++
-    if (has(s, 'growth')) {
-      sum.growth = activeRes(s).some(r => r.id === 'res_legend') ? 0.16 : 0.08
-      for (const u of boardOf(s)) u.bonus += sum.growth
-    }
+    if (has(s, 'growth')) sum.growth = activeRes(s).some(r => r.id === 'res_legend') ? 0.16 : 0.08
+    if (isCmd(s, 'drill')) sum.growth += 0.02
+    if (sum.growth) for (const u of boardOf(s)) u.bonus += sum.growth
   } else {
     s.lives--
     s.pity++
   }
   s.last = sum
-  if (win && s.round >= MAX_ROUND) s.over = 'win'
+  if (win && s.round === MAX_ROUND && !s.endless) s.over = 'win'
   else if (s.lives <= 0) s.over = 'lose'
   if (s.over) return sum
   s.after = true
-  if (AUG_ROUNDS.includes(s.round) || (!win && kind === 'boss')) { s.queue.push('augment'); rollAugs(s) }
+  if (isAugRound(s.round) || (!win && kind === 'boss')) queueAug(s)
   if (win) { s.queue.push('reward'); rollRewards(s, kind !== 'normal') }
   if (!s.queue.length) advance(s)
   return sum
+}
+
+// 무한 원정은 16·19·22…에도 증강체
+export const isAugRound = (r: number) => AUG_ROUNDS.includes(r) || (r > MAX_ROUND && (r - MAX_ROUND) % 3 === 1)
+// 고를 증강체가 남아 있을 때만 (무한 원정에서 다 모으면 건너뜀)
+function queueAug(s: RunState) {
+  rollAugs(s)
+  if (s.augChoices.length) s.queue.push('augment')
+}
+
+// 15R 클리어 뒤 계속 (Balatro 엔드리스): 보스 전리품을 받고 16R로
+export function goEndless(s: RunState) {
+  if (s.over !== 'win' || s.endless || s.sandbox) return
+  s.endless = { won: s.stats.won, elite: s.stats.elite, fresh: s.stats.fresh }
+  s.elites = { ...(s.elites ?? {}), ...endlessElites(s.rng) }
+  s.over = null
+  s.after = true
+  s.queue.push('reward')
+  rollRewards(s, true)
 }
 
 export const income = (s: RunState, won: boolean) => 5 + Math.floor(s.round / 3) + (won ? 1 : 2) + (has(s, 'midas') ? 2 : 0)
@@ -341,9 +403,13 @@ export const income = (s: RunState, won: boolean) => 5 + Math.floor(s.round / 3)
 function advance(s: RunState) {
   s.after = false
   const won = s.last?.win ?? true
-  if (won || s.round < MAX_ROUND) s.round++ // 보스에게 지면 보스 재도전
+  if (won || s.round !== MAX_ROUND) s.round++ // 15R 보스에게 지면 재도전
   s.xp += XP_PER_ROUND
-  s.gold += income(s, won)
+  const interest = isCmd(s, 'merchant') ? Math.min(3, Math.floor(s.gold / 10)) : 0 // TFT 이자처럼 수입 전 골드 기준
+  s.gold += income(s, won) + interest
+  if (interest) s.notes.push(`금화 상인: 이자 +${interest} 골드`)
+  if (isCmd(s, 'smith') && s.round % 4 === 0) { const it = pick(s.rng, ITEMS); s.items.push(it.id); s.notes.push(`대장장이: ${it.name}`) }
+  s.cmdUsed = false
   s.freeRerolls = has(s, 'midas') ? 1 : 0
   s.wave = makeWave(s.round, s.rng, s.elites)
   rollShop(s)
@@ -366,10 +432,14 @@ export function rollAugs(s: RunState) {
     return s.pity > 0 && a.rarity === 1 ? base * 0.1 : base // 역전의 기회: 실버 거의 안 나옴
   }
   const out: AugDef[] = []
+  const n = isCmd(s, 'seer') ? 4 : 3
+  const pair = s.promise ? RESONANCES.find(r => r.id === s.promise)?.pair : undefined
+  const promised = pair ? pool.find(a => pair.includes(a.id)) : undefined
+  if (promised) out.push(promised)
   // 한 칸은 지금 빌드에 맞는 것 (공명 상대 / 주력 특성) → 운보다 계획
-  const fits = pool.filter(a => formsRes(s, a.id) || a.fit?.some(t => top.slice(0, 2).includes(t)))
+  const fits = pool.filter(a => !out.includes(a) && (formsRes(s, a.id) || a.fit?.some(t => top.slice(0, 2).includes(t))))
   if (fits.length) out.push(pickW(s.rng, fits, w))
-  while (out.length < 3) {
+  while (out.length < n) {
     const rest = pool.filter(a => !out.includes(a))
     if (!rest.length) break
     out.push(pickW(s.rng, rest, w))
@@ -397,6 +467,9 @@ export function pickAug(s: RunState, id: string): string[] {
   s.augments.push(id)
   s.pity = 0
   s.augChoices = []
+  // 공명술사: 약속한 짝을 고르면 다음에 나머지 짝, 다른 걸 고르거나 공명이 켜지면 끝
+  const pp = RESONANCES.find(r => r.id === s.promise)?.pair
+  if (!pp?.includes(id) || pp.every(p => has(s, p))) s.promise = undefined
   AUG[id].onPick?.(ctx(s))
   const fresh = activeRes(s).map(r => r.id).filter(r => !before.includes(r))
   s.newRes.push(...fresh)

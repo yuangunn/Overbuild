@@ -49,7 +49,9 @@ kbd { font: 12px Galmuri11, monospace; color: var(--k); background: var(--lgrey)
 .pill.gold b { color: var(--gold) } .pill.warn { border-image-source: url(./assets/ui/p1-gold.png); color: var(--yellow) }
 .pill.wave.elite { border-image-source: url(./assets/ui/p1-plum.png); color: var(--skin) } .pill.wave.boss { border-image-source: url(./assets/ui/p1-red.png); color: var(--red); animation: blink 1s steps(2) infinite }
 .pill.lives { gap: 0 }
-.pill.next { color: var(--skin); cursor: help } .pill.next .spr { width: 16px; height: 16px }
+.pill.endless { border-image-source: url(./assets/ui/p1-gold.png); color: var(--orange) }
+.pill.next { color: var(--skin); cursor: help }
+.pill.cmd { color: var(--skin); cursor: help } .pill.cmd .spr { width: 16px; height: 16px } button.pill.cmd.act { cursor: pointer; color: var(--yellow); border-width: 3px; border-image: url(./assets/ui/b1-gold.png) 3 fill / 3px; padding: 0 6px; font-size: 12px } .pill.next .spr { width: 16px; height: 16px }
 .hud { max-width: 100% } .hud > span { flex: none }
 .hud .gimmick { display: inline-flex; align-items: center; gap: 4px; color: var(--yellow); font-weight: 400; flex: 0 1 auto; min-width: 0 }
 .hud .gimmick > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }

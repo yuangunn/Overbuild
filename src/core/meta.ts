@@ -2,13 +2,13 @@
 import type { RunState } from './run.ts'
 import { cleanHero, type HeroDef } from './heroes.ts'
 
-export interface Meta { shards: number; unlocked: string[]; best: number; runs: number; wins: number; found: string[]; speed: number }
+export interface Meta { shards: number; unlocked: string[]; best: number; runs: number; wins: number; found: string[]; speed: number; endless: number }
 
 const KEY = 'overbuild:meta:v1'
 const RUN_KEY = 'overbuild:run:v1'
 const HERO_KEY = 'overbuild:heroes:v1'
 const SAND_KEY = 'overbuild:sandbox:v1'
-const DEF: Meta = { shards: 0, unlocked: [], best: 0, runs: 0, wins: 0, found: [], speed: 1 }
+const DEF: Meta = { shards: 0, unlocked: [], best: 0, runs: 0, wins: 0, found: [], speed: 1, endless: 0 }
 
 export const UNLOCKS = [
   { id: 'u_phoenix', emoji: '🔥', name: '불사조', desc: '유닛 · 비전/망령. 처음 쓰러지면 부활하며 폭발', cost: 10 },
@@ -57,7 +57,17 @@ export function buyUnlock(m: Meta, id: string): string | null {
 }
 
 // 런 종료 정산: 이긴 전투 1 + 정예 2 + 클리어 10 + 처음 찾은 공명 2
+// 무한 원정은 15R 클리어 때 한 번 정산했으니 그 뒤 몫만 더하고 최고 라운드를 남긴다
 export function settle(m: Meta, s: RunState): number {
+  const e = s.endless
+  if (e) {
+    const shards = s.stats.won - e.won + (s.stats.elite - e.elite) * 2 + (s.stats.fresh - e.fresh) * 2
+    m.shards += shards
+    m.endless = Math.max(m.endless, s.round)
+    saveMeta(m)
+    saveRun(null)
+    return shards
+  }
   const shards = s.stats.won + s.stats.elite * 2 + (s.over === 'win' ? 10 : 0) + s.stats.fresh * 2
   m.shards += shards
   m.runs++

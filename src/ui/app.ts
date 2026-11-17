@@ -6,6 +6,7 @@ import { ENEMIES, AFFIX, AFFIXES, ELITES, enemyMult } from '../core/data/enemies
 import { TRAITS, TRAIT_IDS } from '../core/data/traits.ts'
 import { AUG, AUGMENTS, RESONANCES } from '../core/data/augments.ts'
 import { ITEM, ITEMS } from '../core/data/items.ts'
+import { CMD } from '../core/data/commanders.ts'
 import { LIMITS, PASSIVES, SKILL_SRC, cleanHero, newHero, powerGrade, registerHeroes, skillDesc, type HeroDef, type Stat } from '../core/heroes.ts'
 import * as R from '../core/run.ts'
 import * as M from '../core/meta.ts'
@@ -90,7 +91,7 @@ function titleScreen() {
     <p class="tag">작은 선택이 쌓여, 사기 조합이 완성되는 순간.</p>
     <div class="menu">
       <button class="primary big" data-act="new">${ic('wave', 32)} 새 원정</button>
-      ${cont ? `<button class="big" data-act="resume">▶ 이어하기 · ${run!.round}라운드</button>` : ''}
+      ${cont ? `<button class="big" data-act="resume">▶ 이어하기 · ${run!.endless ? '무한 ' : ''}${run!.round}라운드</button>` : ''}
       <div class="row">
         <button data-act="meta">${ic('shard')} 영구 성장 <b class="gold">${meta.shards}</b></button>
         <button data-act="codex">${ic('codex')} 공명 도감 ${meta.found.length}/${RESONANCES.length}</button>
@@ -103,7 +104,7 @@ function titleScreen() {
       <div><b>${ic('overload')}증강체</b>규칙을 바꾸는 힘. 두 개가 맞물리면<br><em>공명</em>이 터집니다.</div>
       <div><b>${ic('boss')}15라운드</b>5·10 정예, 15 최종 보스.<br>생명 ${3 + (meta.unlocked.includes('life') ? 1 : 0)}개, 져도 계속 갑니다.</div>
     </div>
-    <p class="dim">최고 ${meta.best}라운드 · 클리어 ${meta.wins}회 · 원정 ${meta.runs}회</p>
+    <p class="dim">최고 ${meta.best}라운드 · 클리어 ${meta.wins}회 · 원정 ${meta.runs}회${meta.endless ? ` · 무한 원정 최고 ${meta.endless}라운드` : ''}</p>
     <p class="credits">v${version} · ${CREDITS}</p>
   </div>`
 }
@@ -145,9 +146,9 @@ function runScreen(s: R.RunState) {
   return `<div class="run ${battle ? 'fighting' : ''} ${sb ? 'sandbox' : ''}">
     <header class="top">
       <div class="brand">OVER<b>BUILD</b></div>
-      ${sb ? sandTop(s) : `<div class="pill">라운드 <b>${s.round}</b>/${R.MAX_ROUND}</div>
+      ${sb ? sandTop(s) : `<div class="pill ${s.endless ? 'endless' : ''}">${s.endless ? `무한 원정 <b>${s.round}</b>R` : `라운드 <b>${s.round}</b>/${R.MAX_ROUND}`}</div>
       <div class="pill wave ${s.wave.kind}">${ic(s.wave.kind === 'normal' ? 'wave' : s.wave.kind)} ${s.wave.label}</div>
-      ${nextElite(s)}
+      ${nextElite(s)}${cmdPill(s)}
       <div class="pill lives" title="생명">${ic('heart').repeat(Math.max(0, s.lives))}${ic('heart0').repeat(Math.max(0, s.maxLives - s.lives))}</div>
       <div class="pill gold" title="골드">${ic('coin')}<b>${s.gold}</b></div>
       <div class="pill ${board.length < slots ? 'warn' : ''}" title="배치">${sprHTML('shieldbearer', '', 'mini', 0)}${board.length}/${slots}</div>`}
@@ -196,12 +197,24 @@ function runScreen(s: R.RunState) {
   </div>`
 }
 
+// 사령관: 능력형은 눌러서 쓴다 (Hearthstone 전장의 영웅 능력 버튼처럼)
+function cmdPill(s: R.RunState) {
+  const c = s.cmd ? CMD[s.cmd] : undefined
+  if (!c) return ''
+  const art = sprHTML('cmd_' + c.id, '', 'mini', 0)
+  if (!c.active) return `<div class="pill cmd" data-tip="c:">${art}${c.name}</div>`
+  const off = !!battle || s.cmdUsed || s.gold < c.active.cost || s.queue.length > 0
+  return `<button class="pill cmd act" data-act="useCmd" data-tip="c:" ${off ? 'disabled' : ''}>${art}${c.active.label} ${s.cmdUsed ? '<span class="dim">사용함</span>' : `${c.active.cost}${ic('coin')}`}</button>`
+}
+
 // 다음 정예·보스 예고 (Slay the Spire 지도 꼭대기의 보스 표시처럼 미리 보고 준비한다)
+const elitesOf = (s: R.RunState): Record<number, string> => s.elites ?? Object.fromEntries(Object.entries(ELITES).map(([r, a]) => [r, a[0]]))
 function nextElite(s: R.RunState) {
-  const r = Object.keys(ELITES).map(Number).find(x => x > s.round || (x === s.round && s.wave.kind === 'normal'))
-  if (!r || r === s.round) return ''
-  const id = s.elites?.[r] ?? ELITES[r][0]
-  return `<div class="pill next" data-tip="x:${r}">${r}R ${r >= R.MAX_ROUND ? '보스' : '정예'} ${sprHTML(id, ENEMIES[id].emoji, 'mini', 1)}${ENEMIES[id].name}</div>`
+  const el = elitesOf(s)
+  const r = Object.keys(el).map(Number).sort((a, b) => a - b).find(x => x > s.round)
+  if (!r) return ''
+  const id = el[r]
+  return `<div class="pill next" data-tip="x:${r}">${r}R ${id === 'boss' ? '보스' : '정예'} ${sprHTML(id, ENEMIES[id].emoji, 'mini', 1)}${ENEMIES[id].name}</div>`
 }
 
 // 전장 구역: 0 숲 · 1 폐허 · 2 심연 · 3 보스
@@ -270,6 +283,7 @@ function modal(s: R.RunState) {
   if (battle) return ''
   if (showSummary && s.last) return summaryModal(s)
   if (s.over) return endModal(s)
+  if (s.queue[0] === 'commander') return cmdModal(s)
   if (s.queue[0] === 'augment') return augModal(s)
   if (s.queue[0] === 'reward') return rewardModal(s)
   return ''
@@ -288,6 +302,18 @@ function summaryModal(s: R.RunState) {
     ${sm.loot ? `<p class="gold">${ic('coin')} 보물 고블린 +${sm.loot} 골드</p>` : ''}
     <p class="dim">최대 일격 <b class="gold">${fmt(sm.maxHit)}</b></p>
     <button class="primary big" data-act="continue">${s.sandbox ? '다시 배치' : '계속'} <kbd>Space</kbd></button>
+  </div></div>`
+}
+
+function cmdModal(s: R.RunState) {
+  return `<div class="modal"><div class="box pick">
+    <h2>사령관 선택</h2>
+    <p class="dim">이번 원정을 이끌 사령관을 고르세요. 원정마다 여덟 명 중 셋이 나옵니다.</p>
+    <div class="aug-cards">${(s.cmdChoices ?? []).map(id => {
+      const c = CMD[id]
+      return `<div class="aug-card cmd" data-act="pickCmd" data-id="${id}"><div class="rar">${c.active ? `능력 · 라운드마다 ${c.active.cost}골드` : '패시브'}</div>
+        <div class="em">${sprHTML('cmd_' + id, '', 'big', 0)}</div><h3>${c.name}</h3><p>${c.desc}</p></div>`
+    }).join('')}</div>
   </div></div>`
 }
 
@@ -310,7 +336,7 @@ function augCard(s: R.RunState, id: string) {
     return !other.locked || s.unlocked.includes('a_' + other.id)
   })
   return `<div class="aug-card r${a.rarity} ${now.length ? 'resonant' : ''}" data-act="pickAug" data-id="${id}">
-    <div class="rar">${RARITY[a.rarity]}</div>
+    <div class="rar">${RARITY[a.rarity]}${RESONANCES.find(r => r.id === s.promise)?.pair.includes(id) ? ' · 공명술사의 약속' : ''}</div>
     <div class="em">${augIc(id, 64)}</div>
     <h3>${a.name}</h3>
     <p>${a.desc}</p>
@@ -350,14 +376,16 @@ function rewardBody(r: R.Reward) {
 function endModal(s: R.RunState) {
   const win = s.over === 'win'
   const next = M.UNLOCKS.filter(u => !meta.unlocked.includes(u.id) && meta.shards >= u.cost)
-  return `<div class="modal"><div class="box end ${win ? 'win' : 'lose'}">
-    <h1>${win ? '원정 성공!' : '원정 실패'}</h1>
-    <p>${win ? '심연의 군주가 쓰러졌습니다.' : `${s.round}라운드에서 쓰러졌습니다.`}</p>
-    <div class="endstats"><span>승리 <b>${s.stats.won}</b></span><span>정예 <b>${s.stats.elite}</b></span><span>최대 일격 <b>${fmt(s.stats.bestHit)}</b></span></div>
+  return `<div class="modal"><div class="box end ${win || s.endless ? 'win' : 'lose'}">
+    <h1>${s.endless ? '무한 원정 끝' : win ? '원정 성공!' : '원정 실패'}</h1>
+    <p>${s.endless ? `${s.round}라운드까지 버텼습니다 · 무한 원정 최고 ${meta.endless}라운드` : win ? '심연의 군주가 쓰러졌습니다.' : `${s.round}라운드에서 쓰러졌습니다.`}</p>
+
+    <div class="endstats">${s.cmd ? `<span>${sprHTML('cmd_' + s.cmd, '', 'mini', 0)}${CMD[s.cmd].name}</span>` : ''}<span>승리 <b>${s.stats.won}</b></span><span>정예 <b>${s.stats.elite}</b></span><span>최대 일격 <b>${fmt(s.stats.bestHit)}</b></span></div>
     <div class="aug-line">${s.augments.map(id => `<span data-tip="a:${id}">${augIc(id, 32)}</span>`).join('')}${R.activeRes(s).map(r => `<span class="res" data-tip="r:${r.id}">${augIc(r.id, 32)}</span>`).join('')}</div>
     <div class="shards">${ic('shard', 32)} +${earned} 별조각 <span class="dim">(보유 ${meta.shards})</span></div>
     ${next.length ? `<p class="gold">지금 해금할 수 있는 것 ${next.length}개 · ${next.slice(0, 3).map(u => u.name).join(', ')}${next.length > 3 ? ' …' : ''}</p>` : ''}
-    <div class="row"><button class="primary big" data-act="new">한 판 더!</button><button data-act="meta">${ic('shard')} 영구 성장</button><button data-act="title">타이틀</button></div>
+    ${win ? `<button class="primary big" data-act="endless">${ic('wave', 32)} 무한 원정 계속</button><p class="dim small">이 빌드 그대로 16라운드부터. 적은 라운드마다 25%씩 강해지고 방어력과 접두사가 쌓입니다. 끝나면 그 뒤 몫만큼 별조각을 더 받습니다.</p>` : ''}
+    <div class="row"><button class="${win ? '' : 'primary'} big" data-act="new">한 판 더!</button><button data-act="meta">${ic('shard')} 영구 성장</button><button data-act="title">타이틀</button></div>
   </div></div>`
 }
 
@@ -386,7 +414,7 @@ function tipHTML(key: string): string {
     return `<div class="tip-h">${sprHTML(t.id, t.emoji, 'tipspr', 1)} <b>${t.name}</b></div><div class="stats">체력 ${fmt(t.hp)} · 공격 ${fmt(t.atk)} · 사거리 ${t.range} <span class="dim">(1라운드 기준, 적 강도만큼 커짐)</span></div>${t.skillName ? `<div><b class="skill">${t.skillName}</b><br>${t.skillDesc}</div>` : ''}`
   }
   if (k === 'x') {
-    const id = run?.elites?.[+v] ?? ELITES[+v]?.[0]
+    const id = run ? elitesOf(run)[+v] : undefined
     const t = id ? ENEMIES[id] : undefined
     return t ? `<div class="tip-h">${sprHTML(t.id, t.emoji, 'tipspr', 1)} <b>${v}라운드 · ${t.name}</b></div><div><b class="skill">${t.skillName}</b><br>${t.skillDesc}</div><div class="dim small">원정을 시작할 때 정해집니다. 미리 대비하세요.</div>` : ''
   }
@@ -398,7 +426,7 @@ function tipHTML(key: string): string {
     const a = sp.aff ? AFFIX[sp.aff] : undefined
     const m = sp.mult * STAR_MULT[(sp.star ?? 1) - 1]
     return `<div class="tip-h">${sprHTML(t.id, t.emoji, 'tipspr', 1)} <b>${a ? `<span style="color:${a.color}">${a.name}</span> ` : ''}${t.name}</b>${sp.star && sp.star > 1 ? ` <span class="gold">${stars(sp.star)}</span>` : ''}</div>
-      <div class="stats">체력 ${fmt(t.hp * m)} · 공격 ${fmt(t.atk * m)} · 사거리 ${t.range}</div>${t.skillName ? `<div><b class="skill">${t.skillName}</b><br>${t.skillDesc}</div>` : ''}${a ? `<div><b style="color:${a.color}">${a.name}</b> ${a.desc}</div>` : ''}`
+      <div class="stats">체력 ${fmt(t.hp * m)} · 공격 ${fmt(t.atk * m)} · 사거리 ${t.range}${sp.armor ? ` · <span class="bad">방어 +${sp.armor}</span>` : ''}</div>${t.skillName ? `<div><b class="skill">${t.skillName}</b><br>${t.skillDesc}</div>` : ''}${a ? `<div><b style="color:${a.color}">${a.name}</b> ${a.desc}</div>` : ''}`
   }
   if (k === 'a') {
     const a = AUG[v]
@@ -414,6 +442,10 @@ function tipHTML(key: string): string {
     return `<div class="tip-h">${ic(d.id, 32)} <b>${d.name}</b>${sy?.crest ? ' <span class="gold">문장: 효과 2배</span>' : ''}</div>
       ${d.tiers.map((n, i) => `<div class="${sy && sy.tier > i ? 'good' : 'dim'}">(${n}) ${d.desc[i]}</div>`).join('')}
       <div class="small who-list">${who.map(t => sprHTML(t.id, t.emoji, 'mini', 0) + t.name).join(' ')}</div>`
+  }
+  if (k === 'c' && run?.cmd) {
+    const c = CMD[run.cmd]
+    return `<div class="tip-h">${sprHTML('cmd_' + c.id, '', 'tipspr', 0)} <b>${c.name}</b> <span class="dim">사령관 · ${c.active ? '능력' : '패시브'}</span></div><div>${c.desc}</div>${c.active ? `<div class="dim small">${run.cmdUsed ? '이번 라운드에 썼습니다' : '눌러서 사용'}</div>` : ''}`
   }
   if (k === 'l' && run) {
     const { lv } = R.levelOf(run.xp)
@@ -610,11 +642,14 @@ function act(name: string, el?: HTMLElement) {
     case 'skip': player?.skip(); return
     case 'fight': startBattle(); return
     case 'continue': showSummary = false; break
+    case 'endless': if (run) { R.goEndless(run); showSummary = false } break
     default: {
       if (!s || battle) return
       if (name === 'buy') { const e = R.buy(s, +d.i!); if (e) toast(e) }
       else if (name === 'reroll') { const e = R.reroll(s); if (e) toast(e) }
       else if (name === 'buyXp') { const e = R.buyXp(s); if (e) toast(e) }
+      else if (name === 'useCmd') { const e = R.useCmd(s); if (e) toast(e) }
+      else if (name === 'pickCmd') return choose(el!, () => R.pickCmd(s, d.id!))
       else if (name === 'sell' && sel.unit != null) { toast(`+${R.sell(s, sel.unit)} 골드`); sel = {} }
       else if (name === 'item') sel = sel.item === +d.i! ? {} : { item: +d.i! }
       else if (name === 'rerollAug') R.rerollAugs(s)

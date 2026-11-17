@@ -21,6 +21,9 @@ export const SPR: Record<string, [Sheet, number, number]> = {
   // 기믹 적·정예
   kingslime: ['Slime', 2, 3], slimelet: ['Slime', 1, 3], bomber: ['Humanoid', 1, 8], treasure: ['Humanoid', 0, 8],
   priest: ['Undead', 1, 7], wraith: ['Undead', 1, 3], goblinking: ['Humanoid', 3, 8], lich: ['Undead', 6, 2],
+  // 시작 사령관
+  cmd_merchant: ['Humanoid', 4, 9], cmd_seer: ['Humanoid', 0, 16], cmd_smith: ['Humanoid', 2, 12], cmd_lord: ['Humanoid', 2, 15],
+  cmd_twin: ['Humanoid', 1, 18], cmd_drill: ['Humanoid', 6, 4], cmd_resonator: ['Humanoid', 2, 18], cmd_recruiter: ['Humanoid', 6, 0],
   // 작가 요청: 이 스프라이트를 게임 어딘가에 숨겨 둘 것
   platino: ['Reptile', 3, 12],
 }

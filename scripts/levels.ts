@@ -29,6 +29,7 @@ function play(smart: boolean, unlocked: string[]) {
   const ends: Record<string, number> = {}
   const enc: Record<string, { n: number; win: number; t: number[]; caught: number; fled: number }> = {}
   let clears = 0, lives = 0
+  const cmds: Record<string, { n: number; clear: number }> = {}
   for (let i = 0; i < N; i++) {
     const s = R.newRun({ unlocked }, 5000 + i)
     for (let g = 0; g < 40 && !s.over; g++) {
@@ -58,13 +59,15 @@ function play(smart: boolean, unlocked: string[]) {
     }
     ends[s.over === 'win' ? 'clear' : s.round] = (ends[s.over === 'win' ? 'clear' : s.round] ?? 0) + 1
     if (s.over === 'win') { clears++; lives += s.lives }
+    const c = (cmds[s.cmd ?? '-'] ??= { n: 0, clear: 0 })
+    c.n++; if (s.over === 'win') c.clear++
   }
-  return { rows, ends, clears, lives, enc }
+  return { rows, ends, clears, lives, enc, cmds }
 }
 
 const f1 = (v: number) => v.toFixed(1)
 for (const [smart, unlocked, name] of [[false, [], '무작위 봇 · 해금 없음'], [true, [], '공명 봇 · 해금 없음'], [true, ALL, '공명 봇 · 전부 해금']] as const) {
-  const { rows, ends, clears, lives, enc } = play(smart, [...unlocked])
+  const { rows, ends, clears, lives, enc, cmds } = play(smart, [...unlocked])
   console.log(`\n■ ${name} — ${N}판, 클리어 ${clears} (${Math.round((clears / N) * 100)}%), 클리어 때 남은 생명 평균 ${f1(lives / Math.max(1, clears))}`)
   console.log(`  종료: ${Object.entries(ends).map(([k, v]) => `${k}:${v}`).join(' ')}`)
   console.log('  R   시도  승률   전투(평균/p90)  30초+  여유(승자 남은 체력)  전력비(중앙)  골드  배치  Lv   ★평균  증강  가장 아픈 적')
@@ -72,5 +75,29 @@ for (const [smart, unlocked, name] of [[false, [], '무작위 봇 · 해금 없�
     const top = Object.entries(x.foeDmg).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k, v]) => `${k} ${Math.round((v / x.n) | 0)}`).join(', ')
     console.log(`  ${r.padStart(2)}  ${String(x.n).padStart(4)}  ${String(Math.round((x.win / x.n) * 100)).padStart(3)}%   ${f1(avg(x.t)).padStart(5)} / ${f1(pct(x.t, 0.9)).padStart(5)}   ${String(Math.round((x.ot / x.n) * 100)).padStart(3)}%   ${String(Math.round(avg(x.margin) * 100)).padStart(3)}%                 ${f1(pct(x.ratio, 0.5)).padStart(6)}     ${f1(avg(x.gold)).padStart(4)}  ${f1(avg(x.board)).padStart(4)}  ${f1(avg(x.lv))}  ${avg(x.star).toFixed(2)}  ${f1(avg(x.augs))}   ${top}`)
   }
+  console.log('  사령관별 클리어: ' + Object.entries(cmds).sort((a, b) => a[1].clear / a[1].n - b[1].clear / b[1].n).map(([k, c]) => `${k} ${Math.round((c.clear / c.n) * 100)}%(${c.n})`).join(' '))
   console.log('  편성별: ' + Object.entries(enc).sort((a, b) => a[1].win / a[1].n - b[1].win / b[1].n).map(([k, e]) => `${k} ${e.n}회 ${Math.round((e.win / e.n) * 100)}% ${f1(avg(e.t))}초${e.caught + e.fled ? ` 보물 ${e.caught}/${e.caught + e.fled}` : ''}`).join(' | '))
+}
+
+// 무한 원정: 15R을 깬 판을 이어서 몇 라운드까지 버티는지
+for (const [unlocked, name] of [[[], '해금 없음'], [ALL, '전부 해금']] as const) {
+  const reach: number[] = []
+  const t: number[] = []
+  for (let i = 0; i < N; i++) {
+    const s = R.newRun({ unlocked: [...unlocked] }, 9000 + i)
+    while (s.round < 100) {
+      if (s.over === 'win') R.goEndless(s)
+      if (s.over) break
+      botPick(s, true)
+      if (s.over) continue
+      botTurn(s, true)
+      const sum = R.endBattle(s, R.buildBattle(s))
+      if (s.endless) t.push(sum.time)
+    }
+    if (s.endless) reach.push(s.round)
+  }
+  const hist: Record<number, number> = {}
+  for (const r of reach) hist[Math.floor(r / 5) * 5] = (hist[Math.floor(r / 5) * 5] ?? 0) + 1
+  console.log(`\n■ 무한 원정 · 공명 봇 · ${name} — 15R 클리어 ${reach.length}판, 도달 평균 ${f1(avg(reach))}R (최고 ${Math.max(0, ...reach)}), 전투 평균 ${f1(avg(t))}초`)
+  console.log('  도달 분포: ' + Object.entries(hist).map(([k, v]) => `${k}~${+k + 4}R:${v}`).join(' '))
 }

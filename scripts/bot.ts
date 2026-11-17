@@ -11,6 +11,7 @@ export function botTurn(s: R.RunState, smart: boolean) {
   // 무작위 봇은 골드 10 넘으면 한 번만
   if (smart) while (s.round >= 3 && s.gold >= 12 && R.boardOf(s).length >= R.slotsOf(s) && !R.buyXp(s)) { /* 산다 */ }
   else if (!smart && s.gold >= 10) R.buyXp(s)
+  if (smart && s.cmd === 'recruiter' && s.round >= 2 && s.gold >= 6) R.useCmd(s)
   // 구매: 겹치는 유닛 / 주력 특성 / 빈자리
   for (let pass = 0; pass < 6; pass++) {
     s.shop.forEach((id, i) => {
@@ -42,7 +43,8 @@ export function botTurn(s: R.RunState, smart: boolean) {
 
 export function botPick(s: R.RunState, smart: boolean) {
   while (s.queue.length && !s.over) {
-    if (s.queue[0] === 'augment') {
+    if (s.queue[0] === 'commander') R.pickCmd(s, s.cmdChoices![0]) // 섞여 나오므로 사령관별 통계가 고르게 쌓인다
+    else if (s.queue[0] === 'augment') {
       const c = s.augChoices
       const score = (id: string) => (RESONANCES.some(r => r.pair.includes(id) && r.pair.every(p => p === id || s.augments.includes(p))) ? 10 : 0) + AUG[id].rarity
       R.pickAug(s, smart ? [...c].sort((a, b) => score(b) - score(a))[0] : c[0])

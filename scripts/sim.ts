@@ -7,6 +7,7 @@ import { AUG, AUGMENTS, RESONANCES } from '../src/core/data/augments.ts'
 import { ENEMIES, enemyMult, makeWave } from '../src/core/data/enemies.ts'
 import { LIMITS, cleanHero, newHero, registerHeroes } from '../src/core/heroes.ts'
 import { TRAITS } from '../src/core/data/traits.ts'
+import * as M from '../src/core/meta.ts'
 import { UNLOCKS } from '../src/core/meta.ts'
 import { bot } from './bot.ts'
 
@@ -192,6 +193,71 @@ console.log('\n[1c] 샌드박스·나만의 영웅')
     `영웅 전투: 빌린 스킬 발동·분열 분신 ${clones}기, 샌드박스 상태(라운드·생명)는 그대로 · ${sum.win ? '승' : '패'} ${sum.time.toFixed(1)}초`)
   registerHeroes([])
   ok(!UNIT.h_test, '지운 영웅은 UNIT에서 빠짐')
+}
+
+// ───────────────────────── 1d. 지휘 레벨·무한 원정
+console.log('\n[1d] 지휘 레벨·무한 원정')
+{
+  const s = R.newRun({ unlocked: [] }, 3)
+  const nat = Array.from({ length: 15 }, (_, i) => R.levelOf(R.XP_PER_ROUND * i).lv + 2)
+  ok(nat.join() === '3,4,4,5,5,6,6,6,7,7,7,8,8,8,8', '경험치를 사지 않으면 라운드별 배치 칸은 예전과 같음')
+  s.gold = 8
+  R.buyXp(s); R.buyXp(s)
+  ok(R.levelOf(s.xp).lv === 3 && R.slotsOf(s) === 5 && s.gold === 0 && R.buyXp(s) === '골드가 부족합니다', '4골드 두 번 → Lv3, 배치 5칸, 골드 부족이면 거절')
+  const old = { ...s, xp: undefined } as unknown as R.RunState
+  old.round = 9
+  ok(R.fixRun(old).xp === 16 && R.slotsOf(old) === 7, '예전 저장분은 라운드로 경험치를 채움')
+}
+{
+  const s = R.newRun({ unlocked: [] }, 11)
+  s.round = 15; s.over = 'win'; s.queue = []; s.stats = { won: 14, elite: 3, bestHit: 0, fresh: 1 }
+  R.goEndless(s)
+  ok(!s.over && !!s.endless && s.queue[0] === 'reward' && s.elites?.[20] !== undefined && s.elites?.[25] === 'boss', '15R 클리어 → 무한 원정: 전리품 고르고 20R 정예·25R 보스 예고')
+  R.pickReward(s, 0)
+  ok(s.round === 16 && s.wave.kind === 'normal' && s.wave.spawns.filter(sp => sp.tpl !== 'treasure').length >= 8 && s.wave.spawns.some(sp => sp.aff) && s.wave.spawns.every(sp => sp.armor === 30),
+    `16R: 일반 편성 ${s.wave.spawns.length}명, 접두사·방어력 +30`)
+  ok(R.isAugRound(16) && R.isAugRound(19) && !R.isAugRound(17) && makeWave(20, s.rng, s.elites).kind === 'elite' && makeWave(25, s.rng, s.elites).kind === 'boss' && makeWave(21, s.rng, s.elites).kind === 'normal',
+    '16·19R 증강체, 20R 정예, 25R 보스, 21R 일반')
+  ok(enemyMult(20) > enemyMult(15) * 1.9, '16R부터 적 배율이 곱으로 오름')
+  s.stats.won = 20; s.stats.elite = 4; s.round = 22; s.over = 'lose'
+  const m = { ...M.loadMeta(), shards: 0, runs: 5, endless: 0 }
+  const got = M.settle(m, s)
+  ok(got === 6 + 2 && m.runs === 5 && m.endless === 22, `무한 원정 정산은 그 뒤 몫만 (+${got}), 원정 횟수는 그대로, 최고 22R 기록`)
+}
+
+// ───────────────────────── 1e. 시작 사령관
+console.log('\n[1e] 시작 사령관')
+{
+  const mk = (id: string, seed = 5) => { const s = R.newRun({ unlocked: [] }, seed); s.cmdChoices = [id]; R.pickCmd(s, id); return s }
+  const lord = mk('lord')
+  ok(lord.cmd === 'lord' && !lord.queue.length && R.slotsOf(lord) === 4 && lord.lives === 2 && lord.maxLives === 2, '군주: 배치 칸 +1, 생명 -1')
+  const twin = mk('twin')
+  twin.gold = 20; twin.shop = ['wolf', 'ranger']
+  R.buy(twin, 0); R.buy(twin, 1)
+  twin.shop = ['necromancer']; R.buy(twin, 0)
+  ok(twin.units.filter(u => u.tpl === 'ranger').length === 2 && twin.units.filter(u => u.tpl === 'wolf').length <= 2 && twin.units.filter(u => u.tpl === 'necromancer').length === 1, '쌍둥이 술사: 1골드는 하나 더, 3골드는 그대로')
+  const res = mk('resonator')
+  const pr = RESONANCES.find(r => r.id === res.promise)!
+  res.queue = ['augment']; R.rollAugs(res)
+  const first = res.augChoices.find(a => pr.pair.includes(a))!
+  R.pickAug(res, first)
+  res.queue = ['augment']; R.rollAugs(res)
+  const second = res.augChoices.find(a => pr.pair.includes(a))!
+  const fresh = R.pickAug(res, second)
+  ok(!!first && !!second && fresh.includes(pr.id) && !res.promise, `공명술사: ${AUG[first].name} → ${AUG[second].name}, 공명 ${pr.name} 켜짐`)
+  const seer = mk('seer')
+  R.rollAugs(seer)
+  ok(seer.augChoices.length === 4 && seer.augRerolls === 2, '예언자: 선택지 4장, 새로고침 2회')
+  const rec = mk('recruiter')
+  rec.units = [{ id: 99, tpl: 'wolf', star: 1, items: [], pos: 0, bonus: 0 }]
+  rec.gold = 5
+  const e1 = R.useCmd(rec), e2 = R.useCmd(rec)
+  ok(!e1 && e2 === '이번 라운드에 이미 썼습니다' && rec.gold === 4 && rec.shop.every(id => UNIT[id!].traits.includes('beast')), '징병관: 1골드로 주력 특성 상점, 라운드에 한 번')
+  const mer = mk('merchant')
+  mer.gold = 27; mer.after = true; mer.last = { win: true } as R.Summary
+  mer.queue = ['reward']; mer.rewardChoices = [{ kind: 'gold', n: 0 }]
+  R.pickReward(mer, 0)
+  ok(mer.round === 2 && mer.gold === 27 + R.income(mer, true) + 2, '금화 상인: 골드 27 → 수입 + 이자 2')
 }
 
 // ───────────────────────── 2. 사기 빌드 (15라운드 보스)

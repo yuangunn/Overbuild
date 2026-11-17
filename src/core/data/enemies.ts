@@ -190,7 +190,7 @@ export const ENEMIES: Record<string, UnitTpl> = {
   }),
 }
 
-export interface Spawn { tpl: string; cell: number; mult: number; star?: number; aff?: string }
+export interface Spawn { tpl: string; cell: number; mult: number; star?: number; aff?: string; armor?: number }
 export interface Wave { label: string; kind: 'normal' | 'elite' | 'boss'; spawns: Spawn[]; hint?: string }
 
 // ── 정예 접두사 (Risk of Rain 2의 정예 속성처럼, 이름 앞에 붙고 오라 색으로 보인다)
@@ -237,7 +237,11 @@ export function applyAffix(f: Fighter, id: string) {
 }
 
 // ponytail: 난이도 곡선은 이 한 줄. scripts/levels.ts 라운드별 통계를 보고 조절.
-export const enemyMult = (r: number) => 1 + 0.3 * (r - 1) + 0.035 * (r - 1) ** 2
+// 무한 원정(16R~)은 15R 배율에서 라운드마다 25%씩 곱으로 오른다 (Balatro 엔드리스처럼 결국 따라잡힌다)
+// 무한 원정 방어력: 최대 체력 비례 효과(시체 폭발·처형 연쇄)도 결국 막히게 모든 피해를 줄인다
+export const ENDLESS_ARMOR = 30
+const quad = (r: number) => 1 + 0.3 * (r - 1) + 0.035 * (r - 1) ** 2
+export const enemyMult = (r: number) => (r <= 15 ? quad(r) : quad(15) * 1.25 ** (r - 15))
 
 export const ZONE = ['고블린 숲', '망자의 폐허', '심연의 문']
 const COUNT = [2, 3, 3, 4, 0, 4, 5, 5, 6, 0, 6, 7, 7, 8, 0]
@@ -248,6 +252,9 @@ const ESCORT: Record<string, string[]> = {
   scorpion: ['orc', 'spider', 'skelarcher'], lich: ['wraith', 'skelarcher', 'skelarcher'], boss: ['demon', 'demon', 'shaman'],
 }
 export const pickElites = (rng: Rng): Record<number, string> => ({ 5: pick(rng, ELITES[5]), 10: pick(rng, ELITES[10]), 15: 'boss' })
+// 무한 원정: 20·30·40… 정예(넷 중 하나), 25·35·45… 최종 보스 재등장
+export const endlessElites = (rng: Rng): Record<number, string> =>
+  Object.fromEntries(Array.from({ length: 17 }, (_, i) => 20 + i * 5).map(r => [r, r % 10 === 5 ? 'boss' : pick(rng, [...ELITES[5], ...ELITES[10]])]))
 
 // 구역별 편성: n = 이번 라운드 적 수. 각 편성은 기믹 하나를 가진다 (Slay the Spire의 구역별 조우 목록처럼).
 interface Encounter { name: string; from: number; hint?: string; affixes?: number; make: (n: number, rng: Rng) => string[] }
@@ -281,20 +288,24 @@ export function makeWave(r: number, rng: Rng, elites: Record<number, string> = {
     for (const c of [col, 1, 2 - col]) {
       for (const row of shuffle(rng, [0, 1, 2, 3])) {
         const cell = c * 4 + row
-        if (!used.has(cell)) { used.add(cell); return { tpl, cell, mult: m } }
+        if (!used.has(cell)) { used.add(cell); return { tpl, cell, mult: m, ...(r > 15 && { armor: ENDLESS_ARMOR * (r - 15) }) } }
       }
     }
     return { tpl, cell: 0, mult: m }
   }
-  const boss = elites[r] ?? (r >= 15 ? 'boss' : undefined)
+  const endless = Math.max(0, r - 15) // 무한 원정 라운드 수
+  const boss = elites[r] ?? (r === 15 ? 'boss' : undefined)
   if (boss) {
-    const kind = r >= 15 ? 'boss' : 'elite'
-    return { label: `${kind === 'boss' ? '최종 보스' : '정예'} · ${ENEMIES[boss].name}`, kind, spawns: [S(boss, 1), ...ESCORT[boss].map(t => S(t))], hint: `${ENEMIES[boss].skillName}: ${ENEMIES[boss].skillDesc}` }
+    const kind = boss === 'boss' ? 'boss' : 'elite'
+    const spawns = [S(boss, 1), ...ESCORT[boss].map(t => S(t))]
+    if (endless) for (const sp of spawns) sp.aff = pick(rng, AFFIXES).id
+    return { label: `${kind === 'boss' ? '최종 보스' : '정예'} · ${ENEMIES[boss].name}`, kind, spawns, hint: `${ENEMIES[boss].skillName}: ${ENEMIES[boss].skillDesc}` }
   }
   const z = r < 5 ? 0 : r < 10 ? 1 : 2
   const enc = pickW(rng, ENCOUNTERS[z].filter(e => r >= e.from), () => 1)
-  const spawns = enc.make(COUNT[r - 1], rng).map(t => S(t))
-  for (const sp of shuffle(rng, [...spawns]).slice(0, enc.affixes ?? 0)) sp.aff = pick(rng, AFFIXES).id
+  const spawns = enc.make(endless ? Math.min(12, 8 + Math.floor(endless / 3)) : COUNT[r - 1], rng).map(t => S(t))
+  // 무한 원정은 접두사가 3라운드마다 하나씩 더 붙는다
+  for (const sp of shuffle(rng, [...spawns]).slice(0, (enc.affixes ?? 0) + Math.ceil(endless / 3))) sp.aff = pick(rng, AFFIXES).id
   const hints = enc.hint ? [enc.hint] : []
   if (r >= 2 && rand(rng) < TREASURE) { spawns.push(S('treasure')); hints.push('보물 고블린: 10초 안에 잡으면 골드') }
   return { label: `${ZONE[z]} · ${enc.name}`, kind: 'normal', spawns, hint: hints.join(' · ') || undefined }
