@@ -1,7 +1,7 @@
 // 한 판(런)의 진행 상태. 전부 JSON 직렬화 가능 → localStorage에 그대로 저장.
 import { UNIT, UNITS, type TraitId, type UnitTpl } from './data/units.ts'
 import { AUG, AUGMENTS, RESONANCES, type AugDef, type PickCtx, type ResDef } from './data/augments.ts'
-import { ITEM, ITEMS } from './data/items.ts'
+import { ITEM, ITEMS, combine } from './data/items.ts'
 import { TRAITS, TRAIT_IDS } from './data/traits.ts'
 import { ENEMIES, applyAffix, endlessElites, enemyMult, makeWave, pickElites, type Wave } from './data/enemies.ts'
 import { Battle, STEP, type Mod, type Side } from './battle.ts'
@@ -257,7 +257,11 @@ function mergeAll(s: RunState) {
       keep.star++
       keep.bonus = Math.max(keep.bonus, ...rest.map(r => r.bonus))
       for (const r of rest) {
-        for (const it of r.items) (keep.items.length < 3 ? keep.items : s.items).push(it)
+        for (const it of r.items) {
+          const next = combine([...keep.items, it])
+          if (next.length <= 3) keep.items = next
+          else s.items.push(it)
+        }
         s.units.splice(s.units.indexOf(r), 1)
       }
       s.notes.push(`★ ${UNIT[keep.tpl].name} ★${keep.star} 승급!`)
@@ -296,8 +300,12 @@ export function move(s: RunState, id: number, dest: number | null): string | nul
 export function equip(s: RunState, idx: number, unitId: number): string | null {
   const u = s.units.find(x => x.id === unitId)
   if (!u || idx < 0 || idx >= s.items.length) return null
-  if (u.items.length >= 3) return '아이템은 유닛당 3개까지'
-  u.items.push(s.items.splice(idx, 1)[0])
+  const next = combine([...u.items, s.items[idx]])
+  if (next.length > 3) return '아이템은 유닛당 3개까지'
+  const made = next.find(i => !u.items.includes(i) && ITEM[i].from)
+  s.items.splice(idx, 1)
+  u.items = next
+  if (made) s.notes.push(`조합! ${ITEM[made].name}`)
   return null
 }
 

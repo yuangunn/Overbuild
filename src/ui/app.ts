@@ -5,7 +5,7 @@ import { UNIT, UNITS, type TraitId, type UnitTpl } from '../core/data/units.ts'
 import { ENEMIES, AFFIX, AFFIXES, ELITES, enemyMult } from '../core/data/enemies.ts'
 import { TRAITS, TRAIT_IDS } from '../core/data/traits.ts'
 import { AUG, AUGMENTS, RESONANCES } from '../core/data/augments.ts'
-import { ITEM, ITEMS } from '../core/data/items.ts'
+import { ITEM, ITEMS, COMBOS, combine } from '../core/data/items.ts'
 import { CMD } from '../core/data/commanders.ts'
 import { HEAT, HEAT_RULE, heatOf, shardMult } from '../core/data/heat.ts'
 import { LIMITS, PASSIVES, SKILL_SRC, cleanHero, newHero, powerGrade, registerHeroes, skillDesc, type HeroDef, type Stat } from '../core/heroes.ts'
@@ -62,7 +62,7 @@ const augIc = (id: string, sz = 16) => ic(id, sz, AUG[id]?.emoji ?? RESONANCES.f
 const unlockIc = (id: string, sz = 32) => id.startsWith('u_') ? sprHTML(id.slice(2), '', '', 0) : augIc(id.startsWith('a_') ? id.slice(2) : id, sz)
 const traitChip = (id: keyof typeof TRAITS) => `<span class="chip" style="--c:${TRAITS[id].color}">${ic(id)}${TRAITS[id].name}</span>`
 const traitChips = (t: UnitTpl) => t.traits.map(traitChip).join('')
-const COUNT_NAMES: Record<string, string> = { treasure: `${sprHTML('treasure', '💰', 'mini', 1)}보물 고블린 처치`, escaped: `${sprHTML('treasure', '💰', 'mini', 1)}보물 고블린 도망`, rebirth: `${sprHTML('phoenix', '🔥', 'mini')}불사조 부활`, ring: `${ic('ring')}쌍둥이 반지`, rune: `${ic('rune')}폭발 룬`, undead: `${ic('undead')}망령 부활`, res_bomb: `${ic('res_bomb')}망자의 폭탄` }
+const COUNT_NAMES: Record<string, string> = { arcburst: `${ic('arcburst')}마력 폭발`, treasure: `${sprHTML('treasure', '💰', 'mini', 1)}보물 고블린 처치`, escaped: `${sprHTML('treasure', '💰', 'mini', 1)}보물 고블린 도망`, rebirth: `${sprHTML('phoenix', '🔥', 'mini')}불사조 부활`, ring: `${ic('ring')}쌍둥이 반지`, rune: `${ic('rune')}폭발 룬`, undead: `${ic('undead')}망령 부활`, res_bomb: `${ic('res_bomb')}망자의 폭탄` }
 const countName = (k: string) => COUNT_NAMES[k] ?? (AUG[k] ? `${augIc(k)}${AUG[k].name}` : k)
 const PARADE = ['shieldbearer', 'ranger', 'apprentice', 'cutthroat', 'wolf', 'frostwitch', 'golem', 'necromancer']
 
@@ -96,7 +96,7 @@ function titleScreen() {
       ${cont ? `<button class="big" data-act="resume">▶ 이어하기 · ${run!.endless ? '무한 ' : ''}${run!.round}라운드</button>` : ''}
       <div class="row">
         <button data-act="meta">${ic('shard')} 영구 성장 <b class="gold">${meta.shards}</b></button>
-        <button data-act="codex">${ic('codex')} 공명 도감 ${meta.found.length}/${RESONANCES.length}</button>
+        <button data-act="codex">${ic('codex')} 도감 · 공명 ${meta.found.length}/${RESONANCES.length}</button>
         <button data-act="sandbox">${ic('train')} 샌드박스</button>
         <button data-act="heroes">${sprHTML('bladedancer', '', 'mini', 0)} 나만의 영웅 ${heroes.length}</button>
       </div>
@@ -145,7 +145,7 @@ function pactScreen() {
 
 function codexScreen() {
   return `<div class="page">
-    <header class="page-head"><button class="ghost" data-act="title">← 뒤로</button><h2>공명 도감</h2><div class="pill">${meta.found.length}/${RESONANCES.length}</div></header>
+    <header class="page-head"><button class="ghost" data-act="title">← 뒤로</button><h2>도감</h2><div class="pill">${meta.found.length}/${RESONANCES.length}</div></header>
     <p class="dim">두 증강체를 함께 가지면 숨은 효과가 깨어납니다. 짝은 공개, 효과는 찾아야 보입니다.</p>
     <div class="codex">${RESONANCES.map(r => {
       const f = meta.found.includes(r.id)
@@ -155,6 +155,9 @@ function codexScreen() {
         <p>${f ? r.desc : '아직 발견하지 못했습니다.'}</p>
       </div>`
     }).join('')}</div>
+    <h2 class="sub">아이템 조합표</h2>
+    <p class="dim">한 유닛에 재료 두 개를 끼우면 자동으로 합쳐져 한 칸만 씁니다. 재료 효과를 모두 갖고 고유 효과가 붙습니다.</p>
+    <div class="combos">${COMBOS.map(c => `<div class="combo" data-tip="i:${c.id}">${ic(c.from![0], 32)}<i>+</i>${ic(c.from![1], 32)}<i>→</i>${ic(c.id, 32)}<div><b>${c.name}</b><span class="dim small">${c.desc}</span></div></div>`).join('')}</div>
   </div>`
 }
 
@@ -478,7 +481,12 @@ function tipHTML(key: string): string {
       <div>라운드마다 경험치 ${R.XP_PER_ROUND}. ${R.BUY_XP}골드로 ${R.BUY_XP}를 더 사면 배치 칸이 늘고 비싼 유닛이 잘 나옵니다.</div>
       <table class="odds"><tr class="dim"><td></td><td>배치</td><td>1골드</td><td>2골드</td><td>3골드</td></tr>${Array.from({ length: R.MAX_LV }, (_, i) => row(i + 1)).join('')}</table>`
   }
-  if (k === 'i') { const it = ITEM[v]; return `<div class="tip-h">${ic(v, 32, it.emoji)} <b>${it.name}</b></div><div>${it.desc}</div>` }
+  if (k === 'i') {
+    const it = ITEM[v]
+    const rec = it.from ? `<div class="dim tip-h">조합: ${it.from.map(x => ic(x) + ITEM[x].name).join(' + ')}</div>`
+      : COMBOS.filter(c => c.from!.includes(v)).map(c => { const o = c.from!.find(x => x !== v) ?? v; return `<div class="dim tip-h">+ ${ic(o)}${ITEM[o].name} → ${ic(c.id)}<span class="gold">${c.name}</span></div>` }).join('')
+    return `<div class="tip-h">${ic(v, 32, it.emoji)} <b>${it.name}</b>${it.from ? ' <span class="gold">조합</span>' : ''}</div><div>${it.desc}</div>${rec}`
+  }
   return ''
 }
 
@@ -856,7 +864,7 @@ const palCard = (k: 'unit' | 'item', id: string, art: string, name: string, tip:
 function sandBottom() {
   const tabs: [typeof palTab, string][] = [['ally', '아군 유닛'], ['foe', '적'], ['hero', `나만의 영웅 ${heroes.length}`], ['item', '아이템']]
   const units = palTab === 'ally' ? UNITS : palTab === 'hero' ? heroes.map(h => UNIT[h.id]).filter(Boolean) : palTab === 'foe' ? Object.values(ENEMIES) : []
-  const cards = palTab === 'item' ? ITEMS.map(i => palCard('item', i.id, ic(i.id, 32, i.emoji), i.name, 'i:' + i.id))
+  const cards = palTab === 'item' ? [...ITEMS, ...COMBOS].map(i => palCard('item', i.id, ic(i.id, 32, i.emoji), i.name, 'i:' + i.id))
     : units.map(t => palCard('unit', t.id, sprHTML(t.id, t.emoji, '', palTab === 'foe' ? 1 : 0), t.name, 'n:' + t.id))
   return `<footer class="bottom sand">
     <div class="palette" data-drop="sell">
@@ -881,8 +889,8 @@ function sandClick(c: HTMLElement) {
   else if (b?.k === 'item') {
     const u = side === 0 ? s.units.find(x => x.pos === cell) : undefined
     if (!u) err = '아이템은 아군 유닛에게만 줄 수 있습니다'
-    else if (u.items.length >= 3) err = '아이템은 유닛당 3개까지 (지우개로 비우기)'
-    else u.items.push(b.id)
+    else if (combine([...u.items, b.id]).length > 3) err = '아이템은 유닛당 3개까지 (지우개로 비우기)'
+    else u.items = combine([...u.items, b.id])
   } else if (b?.k === 'unit') {
     if (side === 1) R.sandEnemy(s, b.id, cell, bStar, bAff)
     else if (UNIT[b.id]) R.sandAlly(s, b.id, cell, bStar)

@@ -132,6 +132,9 @@ export const ICON: Record<string, [string, number, number]> = {
   // 아이템
   sword: ['LongWep', 0, 1], feather: ['Tool', 4, 0], helm: ['Hat', 1, 0], crystal: ['Money', 1, 2], dice: ['ShortWep', 4, 0],
   fang: ['Amulet', 3, 1], charm: ['Amulet', 0, 0], rune: ['Scroll', 3, 1], ring: ['Ring', 2, 0],
+  // 조합 아이템
+  execblade: ['MedWep', 4, 0], stormrune: ['Wand', 0, 0], bastion: ['Shield', 4, 0], infinity: ['Ring', 6, 3], bloodthirst: ['LongWep', 4, 1],
+  luckyring: ['Ring', 2, 1], oath: ['Amulet', 1, 2], arcburst: ['Amulet', 7, 0], titan: ['Armor', 2, 6], quickdraw: ['LongWep', 0, 0],
   // 특성 (문장 증강체도 같은 아이콘)
   ...TRAIT_ICON, ...Object.fromEntries(Object.entries(TRAIT_ICON).map(([k, v]) => ['crest_' + k, v])),
   // 증강체

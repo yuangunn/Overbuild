@@ -351,3 +351,9 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 18px; border: 0; bord
 .rule.on { border-image-source: url(./assets/ui/p2-red.png) }
 .rule .cost { color: var(--orange); min-width: 52px } .rule .body { flex: 1; display: flex; flex-direction: column }
 .rule .pips { display: flex; gap: 3px } .rule .pips i { width: 10px; height: 10px; background: var(--k); box-shadow: 0 0 0 1px var(--grey) } .rule .pips i.on { background: var(--red) }
+
+/* ── 아이템 조합표 */
+.page h2.sub { margin-top: 24px; font-size: 20px }
+.combos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px }
+.combo { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border: 8px solid transparent; border-image: url(./assets/ui/p2-grey.png) 8 fill / 8px }
+.combo > i { font-style: normal; color: var(--dim) } .combo > div { display: flex; flex-direction: column; margin-left: 8px; min-width: 0 }

@@ -4,6 +4,7 @@ import { STEP, type Battle, type Fighter } from '../src/core/battle.ts'
 import * as R from '../src/core/run.ts'
 import { UNIT, UNITS } from '../src/core/data/units.ts'
 import { AUG, AUGMENTS, RESONANCES } from '../src/core/data/augments.ts'
+import { COMBOS, ITEMS, combine } from '../src/core/data/items.ts'
 import { ENEMIES, enemyMult, makeWave } from '../src/core/data/enemies.ts'
 import { LIMITS, cleanHero, newHero, registerHeroes } from '../src/core/heroes.ts'
 import { TRAITS } from '../src/core/data/traits.ts'
@@ -291,6 +292,32 @@ console.log('\n[1f] 위험도')
   const tb = R.buildBattle(t)
   while (!tb.done) tb.step(STEP)
   ok(!tb.win && tb.t < 36, `제한 시간: 허수아비를 못 잡으면 35초에 패배 (${tb.t.toFixed(1)}초)`)
+}
+
+// ───────────────────────── 1g. 아이템 조합
+console.log('\n[1g] 아이템 조합')
+{
+  const s = R.newRun({ unlocked: [] }, 8)
+  s.queue = []
+  s.units = [{ id: 1, tpl: 'wolf', star: 1, items: ['sword'], pos: 0, bonus: 0 }]
+  s.items = ['feather', 'dice', 'helm', 'charm']
+  R.equip(s, 1, 1) // dice → 처형자의 검
+  ok(s.units[0].items.join() === 'execblade' && s.items.join() === 'feather,helm,charm' && s.notes.some(n => n.includes('처형자의 검')), '대검 + 주사위 → 처형자의 검, 한 칸만 씀')
+  R.equip(s, 0, 1); R.equip(s, 0, 1); R.equip(s, 0, 1)
+  ok(s.units[0].items.join() === 'execblade,feather,bastion' && !s.items.length, '조합 뒤 빈 칸에 3개 더: 깃털 + 투구·부적 → 불굴의 성채')
+  ok(combine(['sword', 'feather', 'dice']).join() === 'execblade,feather' && combine(['execblade', 'sword']).length === 2, '앞에서부터 합치고, 조합 아이템은 재료가 아님')
+  ok(!ITEMS.some(i => COMBOS.includes(i)) && COMBOS.every(c => c.from!.every(x => ITEMS.some(i => i.id === x))), '조합 아이템은 전리품에 나오지 않고 재료는 모두 기본 아이템')
+  // ★ 승급으로 합쳐질 때도 조합
+  const m = R.newRun({ unlocked: [] }, 9)
+  m.units = [{ id: 1, tpl: 'ranger', star: 1, items: ['feather'], pos: 0, bonus: 0 }, { id: 2, tpl: 'ranger', star: 1, items: ['dice'], pos: null, bonus: 0 }]
+  R.addUnit(m, 'ranger', 1)
+  ok(m.units.length === 1 && m.units[0].items.join() === 'quickdraw', '★ 승급하며 모인 깃털 + 주사위 → 신속의 화살')
+  const base = run(vs(setup(5, [['apprentice', 2]]), 'dummy', 1), 12)
+  const inf = run(vs(setup(5, [['apprentice', 2, ['infinity']]]), 'dummy', 1), 12)
+  const c0 = of(base, 'apprentice').st.casts, c1 = of(inf, 'apprentice').st.casts, orig = c1 - (inf.counts.ring ?? 0)
+  ok(c1 === orig * 3 && orig >= c0, `무한의 고리: 원본 ${orig}회 → 총 ${c1}회 (3배)`)
+  const bas = run(vs(setup(8, [['bear', 1, ['bastion']]]), 'brute', 4), 20)
+  ok(of(bas, 'bear').st.bastion === 1, '불굴의 성채: 보호막이 깨지면 한 번 다시')
 }
 
 // ───────────────────────── 2. 사기 빌드 (15라운드 보스)
