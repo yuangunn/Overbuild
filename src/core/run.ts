@@ -3,7 +3,7 @@ import { UNIT, UNITS, type TraitId, type UnitTpl } from './data/units.ts'
 import { AUG, AUGMENTS, RESONANCES, type AugDef, type PickCtx, type ResDef } from './data/augments.ts'
 import { ITEM, ITEMS } from './data/items.ts'
 import { TRAITS, TRAIT_IDS } from './data/traits.ts'
-import { ENEMIES, makeWave, type Wave } from './data/enemies.ts'
+import { ENEMIES, applyAffix, enemyMult, makeWave, pickElites, type Wave } from './data/enemies.ts'
 import { Battle, STEP, type Mod, type Side } from './battle.ts'
 import { mkRng, pick, pickW, rand, shuffle, type Rng } from './rng.ts'
 
@@ -27,10 +27,11 @@ export interface Summary {
   label: string
   kind: Wave['kind']
   time: number
-  dmg: { id: string; name: string; emoji: string; star: number; v: number; n: number }[]
+  dmg: { id: string; name: string; emoji: string; star: number; v: number; taken: number; n: number }[]
   counts: Record<string, number>
   maxHit: number
   growth: number
+  loot: number // 보물 고블린 골드
 }
 
 export interface RunState {
@@ -58,6 +59,8 @@ export interface RunState {
   stats: { won: number; elite: number; bestHit: number; fresh: number }
   over: null | 'win' | 'lose'
   last: Summary | null
+  elites?: Record<number, string> // 라운드 → 정예·보스 (v0.2 저장분엔 없음 → 기본값)
+  sandbox?: boolean
   newRes: string[]
   notes: string[] // UI가 꺼내서 토스트로 보여준다
 }
@@ -66,6 +69,8 @@ const has = (s: RunState, id: string) => s.augments.includes(id)
 export const boardOf = (s: RunState) => s.units.filter(u => u.pos !== null)
 export const benchOf = (s: RunState) => s.units.filter(u => u.pos === null)
 export const slotsOf = (s: RunState) => Math.min(12, SLOTS[Math.min(s.round, MAX_ROUND) - 1] + s.bonusSlots)
+// 유닛·적·나만의 영웅을 한 이름으로 찾는다 (영웅은 heroes.ts가 UNIT에 등록)
+export const tplOf = (id: string): UnitTpl | undefined => UNIT[id] ?? ENEMIES[id]
 export const sellValue = (u: OwnedUnit) => UNIT[u.tpl].cost * 3 ** (u.star - 1)
 export const shopPool = (s: RunState) => UNITS.filter(t => !t.locked || s.unlocked.includes('u_' + t.id))
 export const activeRes = (s: RunState): ResDef[] => RESONANCES.filter(r => r.pair.every(p => has(s, p)))
@@ -80,9 +85,10 @@ export function newRun(meta: { unlocked: string[] }, seed = Date.now()): RunStat
   const u = meta.unlocked
   const lives = 3 + (u.includes('life') ? 1 : 0)
   const rng = mkRng(seed)
+  const elites = pickElites(rng)
   const s: RunState = {
-    rng, round: 1, lives, maxLives: lives, gold: 6 + (u.includes('gold') ? 3 : 0),
-    units: [], nextId: 1, shop: [], shopSize: u.includes('shop6') ? 6 : 5, wave: makeWave(1, rng),
+    rng, round: 1, lives, maxLives: lives, gold: 6 + (u.includes('gold') ? 3 : 0), elites,
+    units: [], nextId: 1, shop: [], shopSize: u.includes('shop6') ? 6 : 5, wave: makeWave(1, rng, elites),
     augments: [], items: [], queue: [], augChoices: [], rewardChoices: [],
     augRerolls: 1 + (u.includes('augroll') ? 1 : 0), freeRerolls: 0, bonusSlots: 0, pity: 0, after: false,
     unlocked: [...u], stats: { won: 0, elite: 0, bestHit: 0, fresh: 0 }, over: null, last: null, newRes: [], notes: [],
@@ -235,38 +241,49 @@ export function buildBattle(s: RunState): Battle {
   const mods: Mod[] = []
   for (const id of s.augments) { const m = AUG[id]?.mod?.(hasX); if (m) mods.push(m) }
   for (const sy of synergies(s)) if (sy.tier) mods.push(TRAITS[sy.id].mod(sy.tier, sy.x))
-  const b = new Battle([mods, []], Math.floor(rand(s.rng) * 2 ** 31), slotsOf(s))
+  // 샌드박스는 칸 제한 없이 놓되, 고독한 영웅의 빈 칸 계산은 그 라운드의 칸 수 기준
+  const slots = s.sandbox ? Math.max(boardOf(s).length, SLOTS[s.round - 1]) : slotsOf(s)
+  const b = new Battle([mods, []], Math.floor(rand(s.rng) * 2 ** 31), slots)
   for (const u of boardOf(s)) {
     const { x, y } = cellXY(u.pos!, 0)
-    const f = b.add(UNIT[u.tpl], u.star, 0, x, y, 1 + u.bonus)
+    const f = b.add(tplOf(u.tpl)!, u.star, 0, x, y, 1 + u.bonus)
     f.owner = u.id
     for (const it of u.items) ITEM[it].apply(f)
   }
   for (const sp of s.wave.spawns) {
     const { x, y } = cellXY(sp.cell, 1)
-    b.add(ENEMIES[sp.tpl], 1, 1, x, y, sp.mult)
+    const t = tplOf(sp.tpl)
+    if (!t) continue
+    const f = b.add(t, sp.star ?? 1, 1, x, y, sp.mult)
+    if (sp.aff) applyAffix(f, sp.aff)
   }
   b.start()
   return b
 }
 
-export function endBattle(s: RunState, b: Battle): Summary {
+// 전투 결과 집계만 (런 상태는 안 바꾼다 → 샌드박스도 쓴다)
+export function summarize(s: RunState, b: Battle): Summary {
   for (let g = 0; !b.done && g < 60 * 80; g++) b.step(STEP)
-  const win = b.win
-  const kind = s.wave.kind
   const agg = new Map<string, Summary['dmg'][number]>()
   for (const f of b.fighters) {
     if (f.side !== 0) continue
     const key = f.owner !== null ? 'u' + f.owner : f.tpl.id
-    const e = agg.get(key) ?? { id: f.tpl.id, name: f.name, emoji: f.emoji, star: f.owner !== null ? f.star : 0, v: 0, n: 0 }
+    const e = agg.get(key) ?? { id: f.tpl.id, name: f.name, emoji: f.emoji, star: f.owner !== null ? f.star : 0, v: 0, taken: 0, n: 0 }
     e.v += f.dealt
+    e.taken += f.taken
     e.n++
     agg.set(key, e)
   }
-  const sum: Summary = {
-    win, label: s.wave.label, kind, time: b.t, dmg: [...agg.values()].sort((a, c) => c.v - a.v),
-    counts: { ...b.counts }, maxHit: b.maxHit, growth: 0,
+  return {
+    win: b.win, label: s.wave.label, kind: s.wave.kind, time: b.t, dmg: [...agg.values()].sort((a, c) => c.v - a.v),
+    counts: { ...b.counts }, maxHit: b.maxHit, growth: 0, loot: b.counts.treasure ? 4 + s.round : 0,
   }
+}
+
+export function endBattle(s: RunState, b: Battle): Summary {
+  const sum = summarize(s, b)
+  const { win, kind } = sum
+  s.gold += sum.loot
   s.stats.bestHit = Math.max(s.stats.bestHit, b.maxHit)
   if (win) {
     s.stats.won++
@@ -298,7 +315,7 @@ function advance(s: RunState) {
   if (won || s.round < MAX_ROUND) s.round++ // 보스에게 지면 보스 재도전
   s.gold += income(s, won)
   s.freeRerolls = has(s, 'midas') ? 1 : 0
-  s.wave = makeWave(s.round, s.rng)
+  s.wave = makeWave(s.round, s.rng, s.elites)
   rollShop(s)
 }
 
@@ -388,4 +405,51 @@ export function pickReward(s: RunState, i: number) {
   else s.bonusSlots++
   s.rewardChoices = []
   finishPick(s)
+}
+
+// ── 샌드박스: 골드·생명 없이 양쪽 진영을 마음대로 놓고 시험한다 (Bloons TD 6 샌드박스, TABS 전투 배치처럼).
+// 같은 RunState를 쓰되 sandbox = true. 합체(mergeAll)는 거치지 않고, 보상·라운드 진행도 없다.
+export function newSandbox(): RunState {
+  const s = newRun({ unlocked: [] }, Date.now())
+  Object.assign(s, { sandbox: true, round: 10, gold: 0, shop: [], bonusSlots: 12, augRerolls: 0 })
+  s.wave = { label: '샌드박스', kind: 'normal', spawns: [] }
+  return s
+}
+
+const sandMult = (s: RunState, tpl: string) => (ENEMIES[tpl] ? enemyMult(s.round) : 1)
+
+// 적 강도 = 그 라운드의 적 배율 (아군 유닛·영웅을 적 쪽에 놓으면 배율 없이 별만)
+export function sandRound(s: RunState, r: number) {
+  s.round = Math.max(1, Math.min(MAX_ROUND, r))
+  for (const sp of s.wave.spawns) sp.mult = sandMult(s, sp.tpl)
+}
+
+export function sandAlly(s: RunState, tpl: string, cell: number, star: number) {
+  if (!UNIT[tpl]) return
+  s.units = s.units.filter(u => u.pos !== cell)
+  s.units.push({ id: s.nextId++, tpl, star, items: [], pos: cell, bonus: 0 })
+}
+
+export function sandEnemy(s: RunState, tpl: string, cell: number, star: number, aff?: string) {
+  if (!tplOf(tpl)) return
+  s.wave.spawns = s.wave.spawns.filter(sp => sp.cell !== cell)
+  s.wave.spawns.push({ tpl, cell, mult: sandMult(s, tpl), star, aff: ENEMIES[tpl] && aff ? aff : undefined })
+}
+
+// 지우개: 아이템이 있으면 아이템부터, 다음엔 유닛
+export function sandErase(s: RunState, side: Side, cell: number) {
+  if (side === 1) { s.wave.spawns = s.wave.spawns.filter(sp => sp.cell !== cell); return }
+  const u = s.units.find(x => x.pos === cell)
+  if (u?.items.length) u.items = []
+  else s.units = s.units.filter(x => x.pos !== cell)
+}
+
+export function sandWave(s: RunState, r: number, elite?: string) {
+  const elites = { ...(s.elites ?? {}), ...(elite ? { [r]: elite } : {}) }
+  sandRound(s, r)
+  s.wave = makeWave(r, s.rng, elites)
+}
+
+export function sandAug(s: RunState, id: string) {
+  s.augments = has(s, id) ? s.augments.filter(a => a !== id) : [...s.augments, id]
 }

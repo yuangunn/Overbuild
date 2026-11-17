@@ -1,18 +1,19 @@
 // 화면: 상태(run/meta)를 HTML 문자열로 그리고, 클릭·드래그를 core 함수 호출로 바꾼다.
 import '../style.css'
 import { STAR_MULT, W, H, type Battle } from '../core/battle.ts'
-import { UNIT, type UnitTpl } from '../core/data/units.ts'
-import { ENEMIES } from '../core/data/enemies.ts'
-import { TRAITS } from '../core/data/traits.ts'
-import { AUG, RESONANCES } from '../core/data/augments.ts'
-import { ITEM } from '../core/data/items.ts'
+import { UNIT, UNITS, type TraitId, type UnitTpl } from '../core/data/units.ts'
+import { ENEMIES, AFFIX, AFFIXES, ELITES, enemyMult } from '../core/data/enemies.ts'
+import { TRAITS, TRAIT_IDS } from '../core/data/traits.ts'
+import { AUG, AUGMENTS, RESONANCES } from '../core/data/augments.ts'
+import { ITEM, ITEMS } from '../core/data/items.ts'
+import { LIMITS, PASSIVES, SKILL_SRC, cleanHero, newHero, powerGrade, registerHeroes, skillDesc, type HeroDef, type Stat } from '../core/heroes.ts'
 import * as R from '../core/run.ts'
 import * as M from '../core/meta.ts'
 import { playBattle, fmt, drawFloor, type Player } from './arena.ts'
-import { sprHTML, iconHTML, floorImg, CREDITS } from './sprites.ts'
+import { SPR, SHEET_NAMES, sprHTML, sprAt, cellsOf, isSheet, iconHTML, floorImg, CREDITS, type Sheet } from './sprites.ts'
 import { version } from '../../package.json'
 
-type Screen = 'title' | 'run' | 'meta' | 'codex'
+type Screen = 'title' | 'run' | 'meta' | 'codex' | 'heroes'
 
 let meta = M.loadMeta()
 let run: R.RunState | null = M.loadRun()
@@ -23,6 +24,29 @@ let sel: { unit?: number; item?: number } = {}
 let drag: { unit?: number; item?: number } | null = null
 let showSummary = false
 let earned = 0
+
+// 샌드박스: run 자리에 샌드박스 상태를 넣어 원정 화면·드래그·툴팁을 그대로 쓰고, 원정 상태는 exp에 맡겨 둔다
+let exp: R.RunState | null = null
+let sand: R.RunState | null = null
+type Brush = { k: 'unit' | 'item'; id: string } | { k: 'erase' } | null
+let brush: Brush = null
+let bStar = 1, bAff = ''
+let palTab: 'ally' | 'foe' | 'hero' | 'item' = 'ally'
+
+// 나만의 영웅 (고칠 때마다 바로 저장)
+let heroes = M.loadHeroes()
+let editing: string | null = heroes[0]?.id ?? null
+let sheet: Sheet = 'Humanoid'
+let delArm = ''
+function syncHeroes() {
+  registerHeroes(heroes)
+  for (const h of heroes) if (isSheet(h.spr[0])) SPR[h.id] = [h.spr[0], h.spr[1], h.spr[2]]
+}
+syncHeroes()
+const saveHeroes = () => { syncHeroes(); M.saveHeroes(heroes) }
+const curHero = () => heroes.find(h => h.id === editing)
+const openSheet = () => { const s0 = curHero()?.spr[0]; if (s0 && isSheet(s0)) sheet = s0 } // 고른 영웅의 외형 시트를 연다
+const save = () => { if (run) run.sandbox ? M.saveSand(run) : M.saveRun(run) }
 
 const $app = document.getElementById('app')!
 const $tip = document.getElementById('tip')!
@@ -36,14 +60,14 @@ const augIc = (id: string, sz = 16) => ic(id, sz, AUG[id]?.emoji ?? RESONANCES.f
 const unlockIc = (id: string, sz = 32) => id.startsWith('u_') ? sprHTML(id.slice(2), '', '', 0) : augIc(id.startsWith('a_') ? id.slice(2) : id, sz)
 const traitChip = (id: keyof typeof TRAITS) => `<span class="chip" style="--c:${TRAITS[id].color}">${ic(id)}${TRAITS[id].name}</span>`
 const traitChips = (t: UnitTpl) => t.traits.map(traitChip).join('')
-const COUNT_NAMES: Record<string, string> = { rebirth: `${sprHTML('phoenix', '🔥', 'mini')}불사조 부활`, ring: `${ic('ring')}쌍둥이 반지`, rune: `${ic('rune')}폭발 룬`, undead: `${ic('undead')}망령 부활`, res_bomb: `${ic('res_bomb')}망자의 폭탄` }
+const COUNT_NAMES: Record<string, string> = { treasure: `${sprHTML('treasure', '💰', 'mini', 1)}보물 고블린 처치`, escaped: `${sprHTML('treasure', '💰', 'mini', 1)}보물 고블린 도망`, rebirth: `${sprHTML('phoenix', '🔥', 'mini')}불사조 부활`, ring: `${ic('ring')}쌍둥이 반지`, rune: `${ic('rune')}폭발 룬`, undead: `${ic('undead')}망령 부활`, res_bomb: `${ic('res_bomb')}망자의 폭탄` }
 const countName = (k: string) => COUNT_NAMES[k] ?? (AUG[k] ? `${augIc(k)}${AUG[k].name}` : k)
 const PARADE = ['shieldbearer', 'ranger', 'apprentice', 'cutthroat', 'wolf', 'frostwitch', 'golem', 'necromancer']
 
 // ───────────────────────── 렌더
 function render() {
   hideTip()
-  $app.innerHTML = screen === 'title' ? titleScreen() : screen === 'meta' ? metaScreen() : screen === 'codex' ? codexScreen() : run ? runScreen(run) : ''
+  $app.innerHTML = screen === 'title' ? titleScreen() : screen === 'meta' ? metaScreen() : screen === 'codex' ? codexScreen() : screen === 'heroes' ? heroesScreen() : run ? runScreen(run) : ''
   paintFloor()
 }
 
@@ -70,6 +94,8 @@ function titleScreen() {
       <div class="row">
         <button data-act="meta">${ic('shard')} 영구 성장 <b class="gold">${meta.shards}</b></button>
         <button data-act="codex">${ic('codex')} 공명 도감 ${meta.found.length}/${RESONANCES.length}</button>
+        <button data-act="sandbox">${ic('train')} 샌드박스</button>
+        <button data-act="heroes">${sprHTML('bladedancer', '', 'mini', 0)} 나만의 영웅 ${heroes.length}</button>
       </div>
     </div>
     <div class="howto">
@@ -115,15 +141,18 @@ function runScreen(s: R.RunState) {
   const board = R.boardOf(s), bench = R.benchOf(s), slots = R.slotsOf(s)
   const syn = R.synergies(s), res = R.activeRes(s)
   const selU = sel.unit != null ? s.units.find(u => u.id === sel.unit) : undefined
-  return `<div class="run ${battle ? 'fighting' : ''}">
+  const sb = !!s.sandbox
+  return `<div class="run ${battle ? 'fighting' : ''} ${sb ? 'sandbox' : ''}">
     <header class="top">
       <div class="brand">OVER<b>BUILD</b></div>
-      <div class="pill">라운드 <b>${s.round}</b>/${R.MAX_ROUND}</div>
+      ${sb ? sandTop(s) : `<div class="pill">라운드 <b>${s.round}</b>/${R.MAX_ROUND}</div>
       <div class="pill wave ${s.wave.kind}">${ic(s.wave.kind === 'normal' ? 'wave' : s.wave.kind)} ${s.wave.label}</div>
+      ${nextElite(s)}
       <div class="pill lives" title="생명">${ic('heart').repeat(Math.max(0, s.lives))}${ic('heart0').repeat(Math.max(0, s.maxLives - s.lives))}</div>
       <div class="pill gold" title="골드">${ic('coin')}<b>${s.gold}</b></div>
-      <div class="pill ${board.length < slots ? 'warn' : ''}" title="배치">${sprHTML('shieldbearer', '', 'mini', 0)}${board.length}/${slots}</div>
+      <div class="pill ${board.length < slots ? 'warn' : ''}" title="배치">${sprHTML('shieldbearer', '', 'mini', 0)}${board.length}/${slots}</div>`}
       <div class="sp"></div>
+      ${sb ? `<button class="ghost" data-act="heroes" ${battle ? 'disabled' : ''}>나만의 영웅</button>` : ''}
       <button class="ghost" data-act="title" ${battle ? 'disabled' : ''}>메뉴</button>
     </header>
     <div class="mid">
@@ -132,25 +161,25 @@ function runScreen(s: R.RunState) {
         ${syn.length ? syn.map(synRow).join('') : '<p class="dim small">유닛을 배치하면 시너지가 켜집니다. 같은 특성 2명·4명.</p>'}
       </aside>
       <section class="center">
-        <div class="hud" id="hud">${battle ? '' : `<span class="dim">다음 적 · ${s.wave.label} · ${s.wave.spawns.length}명</span>`}</div>
+        <div class="hud" id="hud">${battle ? '' : sb ? sandHud() : `<span class="dim">다음 적 · ${s.wave.spawns.length}명</span>${s.wave.hint ? `<span class="gimmick" title="${s.wave.hint}">${ic('elite')}<span>${s.wave.hint}</span></span>` : ''}`}</div>
         <div class="arena z${zoneOf(s)}" id="arena">${battle ? '<canvas id="cv"></canvas>' : '<canvas class="floor"></canvas>' + arenaCells(s)}</div>
         <div class="ctrl">
           <div class="speed">${[1, 2, 4].map(v => `<button data-act="speed" data-v="${v}" class="${meta.speed === v ? 'on' : ''}">${v}x</button>`).join('')}</div>
           ${battle ? '<button class="big" data-act="skip">⏭ 결과 바로 보기</button>'
-            : `<button class="big fight" data-act="fight" ${board.length ? '' : 'disabled'}>${ic('wave', 32)} 전투 시작 <kbd>Space</kbd></button>`}
-          <div class="hint dim small">${battle ? '' : board.length < slots ? `빈 칸 ${slots - board.length}개 — 대기석 유닛을 끌어다 놓으세요` : '오른쪽은 이번 적입니다 (마우스를 올려 보기)'}</div>
+            : `<button class="big fight" data-act="fight" ${board.length && s.wave.spawns.length ? '' : 'disabled'}>${ic('wave', 32)} 전투 시작 <kbd>Space</kbd></button>`}
+          <div class="hint dim small">${battle || sb ? '' : board.length < slots ? `빈 칸 ${slots - board.length}개 — 대기석 유닛을 끌어다 놓으세요` : '오른쪽은 이번 적입니다 (마우스를 올려 보기)'}</div>
         </div>
       </section>
-      <aside class="panel">
+      ${sb ? sandRight(s, res) : `<aside class="panel">
         <h3>증강체 <span class="dim">${s.augments.length}</span></h3>
         ${s.augments.length ? s.augments.map(id => `<div class="aug-row r${AUG[id].rarity}" data-tip="a:${id}">${augIc(id)}${AUG[id].name}</div>`).join('')
           : '<p class="dim small">1라운드가 끝나면 첫 증강체를 고릅니다.</p>'}
         ${res.length ? `<h3>공명</h3>${res.map(r => `<div class="aug-row res" data-tip="r:${r.id}">${augIc(r.id)}${r.name}</div>`).join('')}` : ''}
         <h3>아이템 <span class="dim small">유닛에 끌어 놓기</span></h3>
         <div class="items">${s.items.length ? s.items.map((it, i) => `<span class="item ${sel.item === i ? 'sel' : ''}" data-item="${i}" data-act="item" data-i="${i}" data-tip="i:${it}">${ic(it, 32, ITEM[it].emoji)}</span>`).join('') : '<span class="dim small">없음</span>'}</div>
-      </aside>
+      </aside>`}
     </div>
-    <footer class="bottom">
+    ${sb ? sandBottom() : `<footer class="bottom">
       <div class="bench" data-drop="bench">
         <div class="lbl">대기석 <span class="dim">${bench.length}/${R.BENCH}</span></div>
         <div class="slots">${Array.from({ length: R.BENCH }, (_, i) => `<div class="bslot">${bench[i] ? token(bench[i]) : ''}</div>`).join('')}</div>
@@ -161,13 +190,21 @@ function runScreen(s: R.RunState) {
           <button class="reroll" data-act="reroll" ${s.gold < 1 && !s.freeRerolls ? 'disabled' : ''}>새로고침<span>${s.freeRerolls ? '무료' : `1${ic('coin')}`}</span><kbd>D</kbd></button>
         </div>
       </div>
-    </footer>
+    </footer>`}
     ${modal(s)}
   </div>`
 }
 
+// 다음 정예·보스 예고 (Slay the Spire 지도 꼭대기의 보스 표시처럼 미리 보고 준비한다)
+function nextElite(s: R.RunState) {
+  const r = Object.keys(ELITES).map(Number).find(x => x > s.round || (x === s.round && s.wave.kind === 'normal'))
+  if (!r || r === s.round) return ''
+  const id = s.elites?.[r] ?? ELITES[r][0]
+  return `<div class="pill next" data-tip="x:${r}">${r}R ${r >= R.MAX_ROUND ? '보스' : '정예'} ${sprHTML(id, ENEMIES[id].emoji, 'mini', 1)}${ENEMIES[id].name}</div>`
+}
+
 // 전장 구역: 0 숲 · 1 폐허 · 2 심연 · 3 보스
-const zoneOf = (s: R.RunState) => (s.wave.kind === 'boss' ? 3 : s.round <= 5 ? 0 : s.round <= 10 ? 1 : 2)
+const zoneOf = (s: R.RunState) => (s.wave.kind === 'boss' || s.wave.spawns.some(sp => ENEMIES[sp.tpl]?.boss) ? 3 : s.round <= 5 ? 0 : s.round <= 10 ? 1 : 2)
 
 const pos = (x: number, y: number) => `left:${((x - 0.5) / W) * 100}%;top:${((y - 0.5) / H) * 100}%;width:${100 / W}%;height:${100 / H}%`
 
@@ -180,9 +217,16 @@ function arenaCells(s: R.RunState) {
   }
   s.wave.spawns.forEach((sp, i) => {
     const { x, y } = R.cellXY(sp.cell, 1)
-    const t = ENEMIES[sp.tpl]
-    h += `<div class="cell foe" style="${pos(x, y)}"><div class="tok enemy ${t.boss ? 'boss' : t.size ? 'elite' : ''}" data-tip="e:${i}"><i class="base"></i>${sprHTML(t.id, t.emoji, '', 1)}</div></div>`
+    const t = R.tplOf(sp.tpl)
+    if (!t) return
+    const glow = sp.aff ? AFFIX[sp.aff]?.color : t.flee ? '#dad45e' : ''
+    h += `<div class="cell foe" data-drop="ecell" data-cell="${sp.cell}" style="${pos(x, y)}"><div class="tok enemy ${t.boss ? 'boss' : t.size && t.size > 0.9 ? 'elite' : ''} ${glow ? 'aff' : ''}" ${glow ? `style="--rc:${glow}"` : ''} data-tip="e:${i}"><i class="base"></i>${sprHTML(t.id, t.emoji, '', 1)}${sp.star && sp.star > 1 ? `<span class="st">${stars(sp.star)}</span>` : ''}</div></div>`
   })
+  if (s.sandbox) for (let cell = 0; cell < 12; cell++) {
+    if (s.wave.spawns.some(sp => sp.cell === cell)) continue
+    const { x, y } = R.cellXY(cell, 1)
+    h += `<div class="cell foe empty" data-drop="ecell" data-cell="${cell}" style="${pos(x, y)}"></div>`
+  }
   return h
 }
 
@@ -228,12 +272,13 @@ function summaryModal(s: R.RunState) {
   const counts = Object.entries(sm.counts).filter(([k]) => k !== 'manasurge' || sm.counts.manasurge > 0).sort((a, b) => b[1] - a[1])
   return `<div class="modal"><div class="box summary ${sm.win ? 'win' : 'lose'}">
     <h2>${sm.win ? '승리!' : '패배…'}</h2>
-    <p class="dim">${sm.label} · ${sm.time.toFixed(1)}초${sm.win ? '' : ' · 생명 -1 · 다음 증강체 등급 ↑, 골드 +2'}${sm.growth ? ` · 성장 +${Math.round(sm.growth * 100)}%` : ''}</p>
+    <p class="dim">${sm.label} · ${sm.time.toFixed(1)}초${sm.win || s.sandbox ? '' : ' · 생명 -1 · 다음 증강체 등급 ↑, 골드 +2'}${sm.growth ? ` · 성장 +${Math.round(sm.growth * 100)}%` : ''}</p>
     <div class="meter">${sm.dmg.slice(0, 8).map((d, i) => `<div class="mrow ${i === 0 && sm.win ? 'mvp' : ''}" style="--i:${i}"><span class="who">${i === 0 && sm.win ? ic('boss') : ''}${sprHTML(d.id, d.emoji, 'mini', 0)} ${d.name}${d.star ? ` <i>${stars(d.star)}</i>` : ''}${d.n > 1 ? ` ×${d.n}` : ''}</span>
-      <div class="bar"><i style="width:${(d.v / top) * 100}%"></i></div><b>${fmt(d.v)}</b></div>`).join('')}</div>
+      <div class="bar"><i style="width:${(d.v / top) * 100}%"></i></div><b>${fmt(d.v)}</b>${s.sandbox ? `<i class="tk">받음 ${fmt(d.taken)}</i>` : ''}</div>`).join('')}</div>
     ${counts.length ? `<div class="counts">${counts.map(([k, v], i) => `<span class="chip" style="--i:${i}">${countName(k)} ×${v}</span>`).join('')}</div>` : ''}
+    ${sm.loot ? `<p class="gold">${ic('coin')} 보물 고블린 +${sm.loot} 골드</p>` : ''}
     <p class="dim">최대 일격 <b class="gold">${fmt(sm.maxHit)}</b></p>
-    <button class="primary big" data-act="continue">계속 <kbd>Space</kbd></button>
+    <button class="primary big" data-act="continue">${s.sandbox ? '다시 배치' : '계속'} <kbd>Space</kbd></button>
   </div></div>`
 }
 
@@ -309,7 +354,7 @@ function endModal(s: R.RunState) {
 // ───────────────────────── 툴팁
 function unitTip(t: UnitTpl, star: number, extra = '') {
   const m = STAR_MULT[star - 1]
-  return `<div class="tip-h">${sprHTML(t.id, t.emoji, 'tipspr', 0)} <b>${t.name}</b> <span class="gold">${stars(star)}</span> <span class="dim">${t.cost}골드</span></div>
+  return `<div class="tip-h">${sprHTML(t.id, t.emoji, 'tipspr', 0)} <b>${t.name}</b> <span class="gold">${stars(star)}</span> <span class="dim">${t.custom ? '나만의 영웅' : t.cost + '골드'}</span></div>
     <div>${traitChips(t)}</div>
     <div class="stats">체력 ${fmt(t.hp * m)} · 공격 ${fmt(t.atk * m)} · 공속 ${t.as}/초 · 사거리 ${t.range}</div>
     <div><b class="skill">${t.skillName}</b> <span class="dim">마나 ${t.mana}</span><br>${t.skillDesc}</div>${extra}`
@@ -321,14 +366,29 @@ function tipHTML(key: string): string {
     const u = run.units.find(o => o.id === +v)
     if (!u) return ''
     const its = u.items.map(i => `<div class="tip-h">${ic(i)}${ITEM[i].name} <span class="dim">${ITEM[i].desc}</span></div>`).join('')
-    return unitTip(UNIT[u.tpl], u.star, `${u.bonus ? `<div class="good">성장 +${Math.round(u.bonus * 100)}%</div>` : ''}${its}<div class="dim small">판매 ${R.sellValue(u)}골드 · 클릭해서 선택</div>`)
+    return unitTip(UNIT[u.tpl], u.star, `${u.bonus ? `<div class="good">성장 +${Math.round(u.bonus * 100)}%</div>` : ''}${its}<div class="dim small">${run.sandbox ? '끌어서 옮기기 · 아래 칸으로 끌면 빠짐' : `판매 ${R.sellValue(u)}골드 · 클릭해서 선택`}</div>`)
   }
   if (k === 't') return unitTip(UNIT[v], 1, '<div class="dim small">클릭해서 구매</div>')
+  if (k === 'n') {
+    const t = R.tplOf(v)
+    if (!t) return ''
+    if (UNIT[v]) return unitTip(t, bStar, '<div class="dim small">고른 뒤 칸을 누르면 배치</div>')
+    return `<div class="tip-h">${sprHTML(t.id, t.emoji, 'tipspr', 1)} <b>${t.name}</b></div><div class="stats">체력 ${fmt(t.hp)} · 공격 ${fmt(t.atk)} · 사거리 ${t.range} <span class="dim">(1라운드 기준, 적 강도만큼 커짐)</span></div>${t.skillName ? `<div><b class="skill">${t.skillName}</b><br>${t.skillDesc}</div>` : ''}`
+  }
+  if (k === 'x') {
+    const id = run?.elites?.[+v] ?? ELITES[+v]?.[0]
+    const t = id ? ENEMIES[id] : undefined
+    return t ? `<div class="tip-h">${sprHTML(t.id, t.emoji, 'tipspr', 1)} <b>${v}라운드 · ${t.name}</b></div><div><b class="skill">${t.skillName}</b><br>${t.skillDesc}</div><div class="dim small">원정을 시작할 때 정해집니다. 미리 대비하세요.</div>` : ''
+  }
   if (k === 'e' && run) {
     const sp = run.wave.spawns[+v]
     if (!sp) return ''
-    const t = ENEMIES[sp.tpl]
-    return `<div class="tip-h">${sprHTML(t.id, t.emoji, 'tipspr', 1)} <b>${t.name}</b></div><div class="stats">체력 ${fmt(t.hp * sp.mult)} · 공격 ${fmt(t.atk * sp.mult)} · 사거리 ${t.range}</div>${t.skillName ? `<div><b class="skill">${t.skillName}</b><br>${t.skillDesc}</div>` : ''}`
+    const t = R.tplOf(sp.tpl)
+    if (!t) return ''
+    const a = sp.aff ? AFFIX[sp.aff] : undefined
+    const m = sp.mult * STAR_MULT[(sp.star ?? 1) - 1]
+    return `<div class="tip-h">${sprHTML(t.id, t.emoji, 'tipspr', 1)} <b>${a ? `<span style="color:${a.color}">${a.name}</span> ` : ''}${t.name}</b>${sp.star && sp.star > 1 ? ` <span class="gold">${stars(sp.star)}</span>` : ''}</div>
+      <div class="stats">체력 ${fmt(t.hp * m)} · 공격 ${fmt(t.atk * m)} · 사거리 ${t.range}</div>${t.skillName ? `<div><b class="skill">${t.skillName}</b><br>${t.skillDesc}</div>` : ''}${a ? `<div><b style="color:${a.color}">${a.name}</b> ${a.desc}</div>` : ''}`
   }
   if (k === 'a') {
     const a = AUG[v]
@@ -340,7 +400,7 @@ function tipHTML(key: string): string {
   if (k === 's') {
     const d = TRAITS[v as keyof typeof TRAITS]
     const sy = run ? R.synergies(run).find(x => x.id === v) : undefined
-    const who = Object.values(UNIT).filter(t => t.traits.includes(d.id) && (!t.locked || run?.unlocked.includes('u_' + t.id)))
+    const who = Object.values(UNIT).filter(t => t.traits.includes(d.id) && !t.custom && (!t.locked || run?.unlocked.includes('u_' + t.id)))
     return `<div class="tip-h">${ic(d.id, 32)} <b>${d.name}</b>${sy?.crest ? ' <span class="gold">문장: 효과 2배</span>' : ''}</div>
       ${d.tiers.map((n, i) => `<div class="${sy && sy.tier > i ? 'good' : 'dim'}">(${n}) ${d.desc[i]}</div>`).join('')}
       <div class="small who-list">${who.map(t => sprHTML(t.id, t.emoji, 'mini', 0) + t.name).join(' ')}</div>`
@@ -387,7 +447,8 @@ function startNew() {
 
 function startBattle() {
   if (!run || battle || run.over || run.queue.length || !R.boardOf(run).length) return
-  M.saveRun(run)
+  if (run.sandbox && !run.wave.spawns.length) return toast('적을 한 명 이상 놓으세요')
+  save()
   battle = R.buildBattle(run)
   sel = {}
   render()
@@ -404,12 +465,13 @@ function startBattle() {
 
 function finishBattle() {
   if (!run || !battle) return
-  R.endBattle(run, battle)
+  if (run.sandbox) run.last = R.summarize(run, battle)
+  else R.endBattle(run, battle)
   battle = null
   player = null
   showSummary = true
   if (run.over) earned = M.settle(meta, run)
-  else M.saveRun(run)
+  else save()
   render()
 }
 
@@ -417,7 +479,7 @@ function after() {
   const before = snapshot()
   if (run) {
     for (const n of run.notes.splice(0)) toast(n)
-    if (!run.over && !battle) M.saveRun(run)
+    if (!run.over && !battle) save()
   }
   render()
   if (before) animateDiff(before)
@@ -492,9 +554,34 @@ function act(name: string, el?: HTMLElement) {
   const d = el?.dataset ?? {}
   const s = run
   switch (name) {
-    case 'new': startNew(); break
+    case 'new': leaveSandbox(); startNew(); break
     case 'resume': screen = 'run'; break
-    case 'title': if (battle) return; screen = 'title'; break
+    case 'title': if (battle) return; leaveSandbox(); screen = 'title'; break
+    case 'sandbox': enterSandbox(); break
+    case 'heroes': if (battle) return; leaveSandbox(); screen = 'heroes'; openSheet(); break
+    // 나만의 영웅
+    case 'hNew': { const h = newHero(); heroes.push(h); editing = h.id; saveHeroes() } break
+    case 'hEdit': editing = d.id!; delArm = ''; openSheet(); break
+    case 'hDup': { const h = curHero(); if (h) { const c = cleanHero({ ...h, id: newHero().id, name: h.name.slice(0, 10) + ' 2' })!; heroes.push(c); editing = c.id; saveHeroes() } } break
+    case 'hDel':
+      if (delArm && delArm === editing) { heroes = heroes.filter(h => h.id !== editing); editing = heroes[0]?.id ?? null; delArm = ''; saveHeroes() }
+      else delArm = editing ?? ''
+      break
+    case 'hTrait': { const h = curHero(), t = d.id as TraitId; if (h) { h.traits = h.traits.includes(t) ? h.traits.filter(x => x !== t) : [...h.traits, t].slice(-2); saveHeroes() } } break
+    case 'hSheet': if (isSheet(d.id!)) sheet = d.id; break
+    case 'hSpr': { const h = curHero(); if (h) { h.spr = [sheet, +d.c!, +d.r!]; saveHeroes() } } break
+    case 'hUse': { const h = curHero(); enterSandbox(); if (h) { brush = { k: 'unit', id: h.id }; palTab = 'hero' } } break
+    // 샌드박스
+    case 'sRound': if (run?.sandbox && !battle) R.sandRound(run, run.round + +d.v!); break
+    case 'sWave': if (run?.sandbox && !battle) R.sandWave(run, run.round); break
+    case 'sTab': palTab = d.v as typeof palTab; break
+    case 'sStar': bStar = +d.v!; break
+    case 'sAff': bAff = d.v ?? ''; break
+    case 'sErase': brush = brush?.k === 'erase' ? null : { k: 'erase' }; break
+    case 'sBrush': { const k = d.k as 'unit' | 'item'; brush = brush && 'id' in brush && brush.k === k && brush.id === d.id ? null : { k, id: d.id! } } break
+    case 'sClear': if (run?.sandbox && !battle) { if (d.v === '1') run.wave.spawns = []; else run.units = [] } break
+    case 'sAug': if (run?.sandbox && !battle) R.sandAug(run, d.id!); break
+    case 'sAugClear': if (run?.sandbox && !battle) run.augments = []; break
     case 'meta': screen = 'meta'; break
     case 'codex': screen = 'codex'; break
     case 'unlock': { const e = M.buyUnlock(meta, d.id!); toast(e ?? '해금! 다음 원정부터 적용됩니다') } break
@@ -548,6 +635,7 @@ $app.addEventListener('click', e => {
   if (!el) return
   if (el.dataset.act) return act(el.dataset.act, el)
   if (!run || battle || modal(run)) return
+  if (run.sandbox && brush) { const c = el.closest<HTMLElement>('.cell'); if (c) return sandClick(c) }
   let err: string | null = null
   if (el.dataset.unit) {
     const id = +el.dataset.unit
@@ -619,8 +707,179 @@ addEventListener('keydown', e => {
     e.preventDefault()
     if (showSummary) act('continue')
     else if (!modal(run)) act('fight')
-  } else if (e.code === 'KeyD' && !modal(run)) act('reroll')
-  else if (e.code === 'Escape') { sel = {}; render() }
+  } else if (e.code === 'KeyD' && !modal(run) && !run.sandbox) act('reroll')
+  else if (e.code === 'Escape') { sel = {}; brush = null; render() }
+})
+
+// ───────────────────────── 샌드박스 (Bloons TD 6 샌드박스·TABS 배치처럼: 돈·목숨 없이 양쪽을 마음대로)
+function enterSandbox() {
+  if (battle) return
+  if (!run?.sandbox) exp = run
+  const s = sand ?? M.loadSand() ?? R.newSandbox()
+  // 지운 영웅·없어진 적은 걸러 낸다 (저장분은 손댈 수 있다)
+  s.units = s.units.filter(u => UNIT[u.tpl] && u.pos !== null)
+  s.wave.spawns = s.wave.spawns.filter(sp => R.tplOf(sp.tpl))
+  s.augments = s.augments.filter(a => AUG[a])
+  s.queue = []
+  s.over = null
+  run = s
+  sel = {}
+  showSummary = false
+  screen = 'run'
+}
+
+function leaveSandbox() {
+  if (!run?.sandbox) return
+  sand = run
+  M.saveSand(run)
+  run = exp
+  exp = null
+  brush = null
+  showSummary = false
+}
+
+const sandTop = (s: R.RunState) => `<div class="pill sandpill">${ic('train')} 샌드박스</div>
+  <div class="pill" title="적 배율·배치 칸 기준 라운드">적 강도
+    <button class="ghost tiny" data-act="sRound" data-v="-1" ${battle ? 'disabled' : ''}>◀</button><b>${s.round}R</b><span class="dim">×${enemyMult(s.round).toFixed(1)}</span>
+    <button class="ghost tiny" data-act="sRound" data-v="1" ${battle ? 'disabled' : ''}>▶</button></div>
+  <button class="ghost" data-act="sWave" ${battle ? 'disabled' : ''}>${s.round}라운드 적 불러오기</button>
+  <div class="pill">아군 ${R.boardOf(s).length} · 적 ${s.wave.spawns.length}</div>`
+
+function sandHud() {
+  const b = brush
+  const msg = !b ? '아래에서 유닛·아이템을 고르고 칸을 누르세요 · 아군은 끌어서 옮기고, 아래 칸으로 끌면 빠집니다'
+    : b.k === 'erase' ? '지우개: 누른 유닛의 아이템 → 유닛 순서로 지웁니다'
+    : b.k === 'item' ? `${ITEM[b.id].name}: 아군 유닛을 누르면 장착 (3개까지)`
+    : `${R.tplOf(b.id)?.name ?? ''} ${stars(bStar)}: ${UNIT[b.id] ? '양쪽 아무 칸에나' : '적 진영(오른쪽) 칸에'} 놓습니다`
+  return `<span class="${b ? 'gimmick' : 'dim'}">${msg}</span>`
+}
+
+function sandRight(s: R.RunState, res: ReturnType<typeof R.activeRes>) {
+  return `<aside class="panel sand-augs">
+    <h3>증강체 <span class="dim">눌러서 켜고 끄기</span></h3>
+    <div class="aug-grid">${AUGMENTS.map(a => `<span class="aug-row r${a.rarity} ${s.augments.includes(a.id) ? 'on' : 'off'}" data-act="sAug" data-id="${a.id}" data-tip="a:${a.id}">${augIc(a.id)}<span>${a.name}</span></span>`).join('')}</div>
+    ${res.length ? `<h3>공명</h3>${res.map(r => `<div class="aug-row res" data-tip="r:${r.id}">${augIc(r.id)}${r.name}</div>`).join('')}` : ''}
+    ${s.augments.length ? '<button class="ghost" data-act="sAugClear">모두 끄기</button>' : ''}
+  </aside>`
+}
+
+const palCard = (k: 'unit' | 'item', id: string, art: string, name: string, tip: string) =>
+  `<div class="pcard ${brush && 'id' in brush && brush.k === k && brush.id === id ? 'on' : ''}" data-act="sBrush" data-k="${k}" data-id="${id}" data-tip="${tip}">${art}<span>${name}</span></div>`
+
+function sandBottom() {
+  const tabs: [typeof palTab, string][] = [['ally', '아군 유닛'], ['foe', '적'], ['hero', `나만의 영웅 ${heroes.length}`], ['item', '아이템']]
+  const units = palTab === 'ally' ? UNITS : palTab === 'hero' ? heroes.map(h => UNIT[h.id]).filter(Boolean) : palTab === 'foe' ? Object.values(ENEMIES) : []
+  const cards = palTab === 'item' ? ITEMS.map(i => palCard('item', i.id, ic(i.id, 32, i.emoji), i.name, 'i:' + i.id))
+    : units.map(t => palCard('unit', t.id, sprHTML(t.id, t.emoji, '', palTab === 'foe' ? 1 : 0), t.name, 'n:' + t.id))
+  return `<footer class="bottom sand">
+    <div class="palette" data-drop="sell">
+      <div class="lbl">
+        ${tabs.map(([k, n]) => `<button class="ghost ${palTab === k ? 'on' : ''}" data-act="sTab" data-v="${k}">${n}</button>`).join('')}
+        <span class="sp"></span>
+        <span class="dim">별</span>${[1, 2, 3].map(n => `<button class="ghost ${bStar === n ? 'on' : ''}" data-act="sStar" data-v="${n}">${stars(n)}</button>`).join('')}
+        <span class="dim">적 접두사</span>${[['', '없음'], ...AFFIXES.map(a => [a.id, a.name])].map(([id, n]) => `<button class="ghost ${bAff === id ? 'on' : ''}" data-act="sAff" data-v="${id}" ${id ? `style="color:${AFFIX[id].color}"` : ''}>${n}</button>`).join('')}
+        <button class="ghost ${brush?.k === 'erase' ? 'on' : ''}" data-act="sErase">지우개</button>
+        <button class="ghost" data-act="sClear" data-v="0">아군 비우기</button><button class="ghost" data-act="sClear" data-v="1">적 비우기</button>
+      </div>
+      <div class="pal-grid">${cards.join('') || (palTab === 'hero' ? '<p class="dim">아직 영웅이 없습니다. <button data-act="heroes">영웅 만들기</button></p>' : '')}</div>
+    </div>
+  </footer>`
+}
+
+function sandClick(c: HTMLElement) {
+  const s = run!, side = c.classList.contains('foe') ? 1 : 0, cell = +c.dataset.cell!
+  const b = brush
+  let err = ''
+  if (b?.k === 'erase') R.sandErase(s, side, cell)
+  else if (b?.k === 'item') {
+    const u = side === 0 ? s.units.find(x => x.pos === cell) : undefined
+    if (!u) err = '아이템은 아군 유닛에게만 줄 수 있습니다'
+    else if (u.items.length >= 3) err = '아이템은 유닛당 3개까지 (지우개로 비우기)'
+    else u.items.push(b.id)
+  } else if (b?.k === 'unit') {
+    if (side === 1) R.sandEnemy(s, b.id, cell, bStar, bAff)
+    else if (UNIT[b.id]) R.sandAlly(s, b.id, cell, bStar)
+    else err = '적 유닛은 오른쪽(적 진영)에만 놓을 수 있습니다'
+  }
+  if (err) toast(err)
+  after()
+}
+
+// ───────────────────────── 나만의 영웅 (TABS 유닛 제작기처럼 외형·능력치를 정하고 스킬·패시브는 게임 속 것을 조합)
+const STATS: [Stat, string, (v: number) => string][] = [
+  ['hp', '체력', v => String(v)], ['atk', '공격력', v => String(v)], ['as', '공격 속도', v => v.toFixed(2) + '/초'], ['range', '사거리', v => v + '칸'],
+  ['armor', '방어력', v => String(v)], ['crit', '치명타', v => Math.round(v * 100) + '%'], ['mana', '스킬 마나', v => String(v)], ['size', '몸집', v => v.toFixed(2)],
+]
+
+function heroesScreen() {
+  const h = curHero()
+  return `<div class="page heroes">
+    <header class="page-head"><button class="ghost" data-act="title">← 뒤로</button><h2>나만의 영웅</h2>
+      <div class="pill gold">샌드박스 전용</div><button data-act="sandbox">${ic('train')} 샌드박스로</button></header>
+    <div class="hero-wrap">
+      <aside class="panel hero-list">
+        <button class="primary" data-act="hNew">+ 새 영웅</button>
+        ${heroes.map(x => `<div class="hero-item ${x.id === editing ? 'on' : ''}" data-act="hEdit" data-id="${x.id}">${sprHTML(x.id, '⭐', 'tipspr', 0)}<b>${x.name}</b><span class="dim">${powerGrade(UNIT[x.id]).grade}</span></div>`).join('') || '<p class="dim small">아직 없습니다.</p>'}
+      </aside>
+      ${h ? heroEditor(h) : `<section class="panel hero-empty"><h3>영웅을 만들어 보세요</h3>
+        <p>외형 ${Object.keys(SHEET_NAMES).reduce((n, k) => n + cellsOf(k as Sheet).length, 0)}종 중 하나를 고르고, 특성 2개와 능력치 8개를 정한 뒤, 게임 속 스킬 ${SKILL_SRC.length}종과 패시브 ${Object.keys(PASSIVES).length - 1}종을 섞습니다.</p>
+        <p class="dim">만든 영웅은 샌드박스에서만 쓸 수 있습니다. 원정 상점·보상에는 나오지 않습니다.</p></section>`}
+    </div>
+  </div>`
+}
+
+function heroEditor(h: HeroDef) {
+  const opt = (v: string, label: string, cur: string) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${label}</option>`
+  const sk = (list: UnitTpl[]) => list.map(t => opt(t.id, `${t.skillName} — ${t.name}`, h.skill)).join('')
+  return `<section class="panel hero-edit">
+    <div id="hero-prev">${heroPrev(h)}</div>
+    <div class="hero-form">
+      <label class="fld"><span>이름</span><input type="text" data-hf="name" maxlength="12" value="${h.name}"></label>
+      <div class="fld"><span>특성 <i class="dim">2개까지</i></span><div>${TRAIT_IDS.map(t => `<span class="chip tbtn ${h.traits.includes(t) ? 'on' : ''}" style="--c:${TRAITS[t].color}" data-act="hTrait" data-id="${t}" data-tip="s:${t}">${ic(t)}${TRAITS[t].name}</span>`).join('')}</div></div>
+      ${STATS.map(([k, label, f]) => { const [lo, hi, st] = LIMITS[k]; return `<label class="fld"><span>${label}</span><input type="range" data-hf="${k}" min="${lo}" max="${hi}" step="${st}" value="${h[k]}"><b id="hv-${k}">${f(h[k])}</b></label>` }).join('')}
+      <label class="fld full"><span>스킬</span><select data-hf="skill">${opt('', '없음', h.skill)}<optgroup label="아군 유닛">${sk(SKILL_SRC.filter(t => UNIT[t.id]))}</optgroup><optgroup label="적">${sk(SKILL_SRC.filter(t => ENEMIES[t.id]))}</optgroup></select></label>
+      <label class="fld full"><span>패시브</span><select data-hf="passive">${Object.entries(PASSIVES).map(([k, p]) => opt(k, p.name + (p.desc ? ' — ' + p.desc : ''), h.passive)).join('')}</select></label>
+    </div>
+    <div class="row">
+      <button class="primary" data-act="hUse">${ic('train')} 샌드박스에서 쓰기</button>
+      <button data-act="hDup">복제</button>
+      <button class="${delArm === h.id ? 'danger' : ''}" data-act="hDel">${delArm === h.id ? '한 번 더 누르면 삭제' : '삭제'}</button>
+    </div>
+  </section>
+  <section class="panel hero-spr">
+    <h3>외형 <span class="dim">DawnLike</span></h3>
+    <div class="tabs">${(Object.keys(SHEET_NAMES) as Sheet[]).map(k => `<button class="ghost ${sheet === k ? 'on' : ''}" data-act="hSheet" data-id="${k}">${SHEET_NAMES[k]}</button>`).join('')}</div>
+    <div class="spr-grid">${cellsOf(sheet).map(([c, r]) => `<span class="pick ${h.spr[0] === sheet && h.spr[1] === c && h.spr[2] === r ? 'on' : ''}" data-act="hSpr" data-c="${c}" data-r="${r}">${sprAt(sheet, c, r)}</span>`).join('')}</div>
+  </section>`
+}
+
+function heroPrev(h: HeroDef) {
+  const t = UNIT[h.id], g = powerGrade(t), src = SKILL_SRC.find(x => x.id === h.skill), p = PASSIVES[h.passive]
+  return `<div class="hp-art">${sprHTML(h.id, '⭐', 'huge', 0)}</div>
+    <div class="hp-body"><h3>${h.name}</h3>
+      <div>${traitChips(t) || '<span class="dim">특성 없음</span>'}</div>
+      <div class="stats">체력 ${fmt(h.hp)} · 공격 ${fmt(h.atk)} · 공속 ${h.as.toFixed(2)} · 사거리 ${h.range} · 방어 ${h.armor} · 치명 ${Math.round(h.crit * 100)}%</div>
+      <div class="grade">전투력 <b>${g.grade}</b> <span class="dim">3골드 유닛 평균의 ${g.x < 10 ? g.x.toFixed(1) : Math.round(g.x)}배 (★1, 기본 공격 기준)</span></div>
+      <div>${src ? `<b class="skill">${src.skillName}</b> <span class="dim">마나 ${h.mana} · ${src.name}의 스킬</span><br>${skillDesc(src)}` : '<span class="dim">스킬 없음 (기본 공격만)</span>'}</div>
+      ${h.passive !== 'none' ? `<div><b class="gold">${p.name}</b> ${p.desc}</div>` : ''}
+    </div>`
+}
+
+// 입력 중에는 전체를 다시 그리지 않는다 (이름 칸 초점·슬라이더 끌기가 끊기지 않게)
+$app.addEventListener('input', e => {
+  const el = (e.target as HTMLElement).closest<HTMLInputElement | HTMLSelectElement>('[data-hf]')
+  const h = curHero()
+  if (!el || !h || screen !== 'heroes') return
+  const k = el.dataset.hf as keyof HeroDef
+  const next = cleanHero({ ...h, [k]: k === 'name' || k === 'skill' || k === 'passive' ? el.value : +el.value })
+  if (!next) return
+  Object.assign(h, next)
+  saveHeroes()
+  $app.querySelector('#hero-prev')!.innerHTML = heroPrev(h)
+  const st = STATS.find(x => x[0] === k)
+  if (st) $app.querySelector('#hv-' + k)!.textContent = st[2](h[st[0]])
+  const item = $app.querySelector('.hero-item.on')
+  if (item) item.innerHTML = `${sprHTML(h.id, '⭐', 'tipspr', 0)}<b>${h.name}</b><span class="dim">${powerGrade(UNIT[h.id]).grade}</span>`
 })
 
 // 다른 컴퓨터에서 터진 오류를 화면에 남겨 제보할 수 있게 한다

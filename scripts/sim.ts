@@ -2,11 +2,13 @@
 // 1) 메커니즘 단언  2) 사기 빌드 vs 증강 없음 (보스전)  3) 봇 완주 통계
 import { STEP, type Battle, type Fighter } from '../src/core/battle.ts'
 import * as R from '../src/core/run.ts'
-import { UNIT } from '../src/core/data/units.ts'
+import { UNIT, UNITS } from '../src/core/data/units.ts'
 import { AUG, AUGMENTS, RESONANCES } from '../src/core/data/augments.ts'
-import { ENEMIES, makeWave } from '../src/core/data/enemies.ts'
+import { ENEMIES, enemyMult, makeWave } from '../src/core/data/enemies.ts'
+import { LIMITS, cleanHero, newHero, registerHeroes } from '../src/core/heroes.ts'
 import { TRAITS } from '../src/core/data/traits.ts'
 import { UNLOCKS } from '../src/core/meta.ts'
+import { bot } from './bot.ts'
 
 const ALL = UNLOCKS.map(u => u.id).filter(id => id !== 'startaug' && id !== 'life' && id !== 'gold' && id !== 'shop6')
 let fails = 0
@@ -124,6 +126,73 @@ console.log('\n[1] 메커니즘')
   ok(sy.count === 3 && sy.x === 2, '그림자의 문장: 개수 2 → 3, 효과 2배')
 }
 
+// ───────────────────────── 1b. 기믹 적·접두사·편성
+console.log('\n[1b] 기믹')
+{
+  const wave = (s: R.RunState, spawns: [string, number][], aff?: string) => {
+    s.wave = { label: 'test', kind: 'normal', spawns: spawns.map(([tpl, cell]) => ({ tpl, cell, mult: 3, aff })) }
+    return s
+  }
+  const team: Spec[] = [['shieldbearer', 2], ['ranger', 2], ['sniper', 2], ['apprentice', 2]]
+  const sl = run(wave(setup(6, team, [], 3), [['kingslime', 0]]))
+  ok(sl.fighters.filter(f => f.tpl.id === 'slimelet').length === 2 && sl.win, '왕슬라임: 쓰러지면 꼬마 슬라임 2마리로 분열')
+  const bo = run(wave(setup(6, [['shieldbearer', 1]], [], 3), [['bomber', 0], ['goblin', 1]]))
+  const bomber = bo.fighters.find(f => f.tpl.id === 'bomber')!
+  ok(!bomber.alive && mine(bo)[0].taken > 0 && bo.fighters.find(f => f.tpl.id === 'goblin')!.taken > 0, '자폭 고블린: 붙으면 터져 아군과 제 편 모두 피해')
+  const caught = R.buildBattle(wave(setup(6, [['sniper', 2], ['ranger', 2]], [], 3), [['treasure', 8]]))
+  const sum = R.summarize(setup(6, []), caught)
+  const away = run(wave(setup(6, [['shieldbearer', 1]], [], 3), [['treasure', 11]]), 30)
+  ok(sum.loot > 0 && (away.counts.escaped ?? 0) === 1 && away.t >= 10 && away.t < 11, `보물 고블린: 원거리 팀은 잡아 ${sum.loot}골드, 느린 근접 혼자면 10초 뒤 도망`)
+  const wr = run(wave(setup(6, team, [], 3), [['wraith', 0]]))
+  ok(wr.fighters.find(f => f.tpl.id === 'wraith')!.st.rev === 1 && wr.win, '망령 기사: 한 번 되살아난다')
+  const li = run(wave(setup(10, team, [], 3), [['lich', 9], ['goblin', 0], ['goblin', 1]]), 40)
+  ok(li.fighters.some(f => f.st.raised), '리치: 쓰러진 적을 되살린다')
+  const pr = run(wave(setup(6, [['shieldbearer', 2]], [], 3), [['priest', 8]]), 15)
+  ok(pr.fighters.some(f => f.side === 1 && f.tpl.id === 'skeleton'), '강령 사제: 해골 졸개를 부른다')
+  const af = R.buildBattle(wave(setup(10, team, [], 3), [['orc', 0]], 'volt'))
+  const orc = af.fighters.find(f => f.side === 1)!
+  ok(orc.name.startsWith('과부하') && orc.glow !== '' && orc.shield > 0, '접두사: 이름·오라·능력 적용 (과부하 = 보호막)')
+  let bad = 0
+  const seen = new Set<string>()
+  for (let seed = 1; seed <= 300; seed++) {
+    const s = R.newRun({ unlocked: [] }, seed)
+    for (let r = 1; r <= 15; r++) {
+      const w = makeWave(r, s.rng, s.elites)
+      seen.add(w.label)
+      const cells = w.spawns.map(x => x.cell)
+      if (w.spawns.some(x => !R.tplOf(x.tpl)) || new Set(cells).size !== cells.length || !w.spawns.length) bad++
+    }
+  }
+  ok(bad === 0, `편성 ${seen.size}종 × 300시드: 모든 적이 실재하고 칸이 겹치지 않음`)
+  const el = R.newRun({ unlocked: [] }, 11)
+  ok(['troll', 'goblinking'].includes(el.elites![5]) && ['scorpion', 'lich'].includes(el.elites![10]), `정예 예고: 5R ${el.elites![5]} · 10R ${el.elites![10]}`)
+}
+
+// ───────────────────────── 1c. 샌드박스·나만의 영웅
+console.log('\n[1c] 샌드박스·나만의 영웅')
+{
+  const h = cleanHero({ ...newHero(), id: 'h_test', name: '<i>시험', hp: 99999, atk: -5, traits: ['arcane', 'beast', 'guard'] as never, skill: 'stormcaller', passive: 'split' })!
+  ok(h.name === 'i시험' && h.hp === LIMITS.hp[1] && h.atk === LIMITS.atk[0] && h.traits.length === 2, '영웅 저장분 정리: 이름 꺾쇠 제거·능력치 범위·특성 2개')
+  registerHeroes([h])
+  ok(!!UNIT.h_test && !UNITS.some(t => t.id === 'h_test') && !R.shopPool(R.newRun({ unlocked: ALL })).some(t => t.id === 'h_test'), '영웅은 UNIT에만 등록, 원정 상점에는 없음')
+  const s = R.newSandbox()
+  R.sandAlly(s, 'h_test', 9, 2)
+  R.sandAlly(s, 'h_test', 9, 1) // 같은 칸은 교체
+  R.sandAlly(s, 'goblin', 5, 1) // 적은 아군 쪽에 못 놓음
+  R.sandEnemy(s, 'troll', 1, 1, 'giant')
+  R.sandEnemy(s, 'h_test', 3, 1) // 영웅은 적 쪽에도
+  R.sandRound(s, 5)
+  ok(s.units.length === 1 && s.wave.spawns.length === 2 && s.wave.spawns[0].mult === enemyMult(5) && s.wave.spawns[1].mult === 1 && s.wave.spawns[0].aff === 'giant',
+    '샌드박스 배치: 같은 칸 교체·적은 오른쪽만·영웅은 양쪽·적 강도는 적에게만')
+  const b = R.buildBattle(s)
+  const sum = R.summarize(s, b)
+  const clones = b.fighters.filter(f => f.tpl.id === 'h_test' && f.summoned).length
+  ok(b.fighters.some(f => f.tpl.id === 'h_test' && (f.st.casts ?? 0) > 0) && clones >= 2 && s.round === 5 && s.lives === s.maxLives,
+    `영웅 전투: 빌린 스킬 발동·분열 분신 ${clones}기, 샌드박스 상태(라운드·생명)는 그대로 · ${sum.win ? '승' : '패'} ${sum.time.toFixed(1)}초`)
+  registerHeroes([])
+  ok(!UNIT.h_test, '지운 영웅은 UNIT에서 빠짐')
+}
+
 // ───────────────────────── 2. 사기 빌드 (15라운드 보스)
 console.log('\n[2] 사기 빌드 — 15라운드 보스, 시드 20개')
 interface Build { name: string; team: Spec[]; augs: string[]; bonus?: number }
@@ -167,67 +236,6 @@ for (const bd of BUILDS) {
 
 // ───────────────────────── 3. 봇 완주
 console.log('\n[3] 봇 완주 통계')
-const val = (u: R.OwnedUnit) => UNIT[u.tpl].cost * 3 ** (u.star - 1)
-
-function botTurn(s: R.RunState, smart: boolean) {
-  const top = R.synergies(s).slice(0, 2).map(x => x.id)
-  // 구매: 겹치는 유닛 / 주력 특성 / 빈자리
-  for (let pass = 0; pass < 6; pass++) {
-    s.shop.forEach((id, i) => {
-      if (!id) return
-      const t = UNIT[id]
-      const dup = s.units.some(u => u.tpl === id && u.star < 3)
-      const fit = t.traits.some(x => top.includes(x))
-      const room = R.boardOf(s).length < R.slotsOf(s)
-      if ((dup || fit || room || !smart) && s.gold >= t.cost + (s.round > 2 ? 1 : 0)) R.buy(s, i)
-    })
-    if (s.gold < 5 || s.round < 3) break
-    R.reroll(s)
-  }
-  // 대기석 → 보드 (빈칸 또는 더 약한 유닛과 교체)
-  for (const u of [...R.benchOf(s)].sort((a, b) => val(b) - val(a))) {
-    const cell = R.autoCell(s, UNIT[u.tpl])
-    if (R.boardOf(s).length < R.slotsOf(s) && cell !== null) { R.move(s, u.id, cell); continue }
-    const weak = R.boardOf(s).sort((a, b) => val(a) - val(b))[0]
-    if (weak && val(weak) < val(u)) R.move(s, u.id, weak.pos)
-  }
-  // 아이템은 가장 비싼 유닛부터
-  while (s.items.length) {
-    const t = R.boardOf(s).filter(u => u.items.length < 3).sort((a, b) => val(b) - val(a))[0]
-    if (!t) break
-    R.equip(s, 0, t.id)
-  }
-  while (R.benchOf(s).length > 6) R.sell(s, R.benchOf(s).sort((a, b) => val(a) - val(b))[0].id)
-}
-
-function botPick(s: R.RunState, smart: boolean) {
-  while (s.queue.length && !s.over) {
-    if (s.queue[0] === 'augment') {
-      const c = s.augChoices
-      const score = (id: string) => (RESONANCES.some(r => r.pair.includes(id) && r.pair.every(p => p === id || s.augments.includes(p))) ? 10 : 0) + AUG[id].rarity
-      R.pickAug(s, smart ? [...c].sort((a, b) => score(b) - score(a))[0] : c[0])
-    } else {
-      const i = s.rewardChoices.findIndex(r => r.kind === 'unit' || r.kind === 'train')
-      R.pickReward(s, smart ? Math.max(0, i) : 0)
-    }
-  }
-}
-
-function bot(seed: number, smart: boolean, unlocked: string[] = []) {
-  let s = R.newRun({ unlocked }, seed)
-  const maxT: number[] = []
-  for (let g = 0; g < 40 && !s.over; g++) {
-    botPick(s, smart)
-    if (s.over) break
-    botTurn(s, smart)
-    s = JSON.parse(JSON.stringify(s)) // 매 라운드 저장/불러오기 왕복
-    const b = R.buildBattle(s)
-    R.endBattle(s, b)
-    maxT.push(b.t)
-  }
-  return { s, maxT: Math.max(...maxT) }
-}
-
 for (const smart of [false, true]) {
   const N = 150
   let wins = 0, rounds = 0, maxT = 0, errors = 0, augs = 0, res = 0

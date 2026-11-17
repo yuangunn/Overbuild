@@ -10,12 +10,19 @@
 최신 Chrome·Edge를 권장한다(macOS Chrome에서 확인). 이모지는 Windows 10 글꼴(Emoji 12)에 있는 것만 쓴다. 화면은 1280×600 이상을 권장한다.
 서버·로그인 없음. 진행 상황은 그 브라우저의 localStorage(`overbuild:*`)에 저장되므로, 컴퓨터·브라우저를 바꾸면 처음부터 시작한다.
 
+## 모드
+
+- **원정**: 15라운드. 구역마다 기믹이 있는 편성(왕슬라임 분열·자폭 고블린·강령 사제·망령 기사·접두사 정예 등 16종)이 나오고, 5·10라운드 정예는 후보 둘 중 하나가 원정 시작 때 정해져 화면 위에 미리 보인다. 2라운드부터 일반 전투에 22% 확률로 보물 고블린이 섞인다(10초 안에 잡으면 골드).
+- **샌드박스**: 골드·생명 없이 아군·적을 아무 칸에나 놓고 별·아이템·증강체·적 접두사·적 강도(1~15라운드 배율)를 바꿔 가며 싸움을 시험한다. 결과 화면에 유닛별 준 피해·받은 피해가 나온다. 배치는 `overbuild:sandbox:v1`에 남는다.
+- **나만의 영웅**: 외형(DawnLike 캐릭터 536종)·특성 2개·능력치 8개를 정하고, 게임 속 스킬과 패시브를 골라 조합한다. 샌드박스에서만 쓸 수 있고 원정 상점·보상에는 나오지 않는다. `overbuild:heroes:v1`에 저장된다.
+
 ## 개발
 
 ```bash
 npm install
 npm run dev      # http://localhost:5173
-npm test         # 헤드리스 검증 (메커니즘 · 사기 빌드 · 봇 300판 완주)
+npm test         # 헤드리스 검증 (메커니즘 · 기믹 · 샌드박스·영웅 · 사기 빌드 · 봇 300판 완주)
+node scripts/levels.ts 1000   # 레벨 통계: 봇 3종 × N판의 라운드별 승률·전투 시간·남은 체력·편성별 승률·보물 고블린 포획률
 npm run build    # dist/ — JS·CSS를 index.html에 넣어 file:// 로도 실행된다 (scripts/inline.js)
 ```
 
@@ -34,16 +41,18 @@ npm run build    # dist/ — JS·CSS를 index.html에 넣어 file:// 로도 실�
 src/core/            게임 규칙 (DOM 없음, node로 바로 실행 가능)
   battle.ts          전투 시뮬레이션. 효과는 전부 Mod 훅(onAttack·onCrit·onCast·onAllyDeath…)으로 끼어든다
   run.ts             한 판의 진행: 상점·승급·배치·시너지 계산·라운드·보상
-  meta.ts            영구 성장(별조각·해금)과 저장
+  meta.ts            영구 성장(별조각·해금)과 저장 (원정·샌드박스·영웅)
+  heroes.ts          나만의 영웅: 스킬·패시브 조합, 저장분 정리(cleanHero), UNIT 등록
   data/units.ts      아군 유닛과 스킬
   data/traits.ts     시너지 6종
   data/augments.ts   증강체와 공명(증강체 2개 조합 효과)
   data/items.ts      아이템
-  data/enemies.ts    적·웨이브·난이도 곡선(enemyMult)
+  data/enemies.ts    적·정예 접두사(AFFIXES)·구역별 편성(ENCOUNTERS)·정예 후보(ELITES)·난이도 곡선(enemyMult)
 src/ui/
   app.ts             화면·입력 (상태 → HTML 문자열)
   arena.ts           캔버스 전투 연출
 scripts/sim.ts       헤드리스 검증
+scripts/levels.ts    라운드별 레벨 통계 (scripts/bot.ts의 봇으로 원정을 돌린다)
 ```
 
 ## 콘텐츠 추가
@@ -51,7 +60,9 @@ scripts/sim.ts       헤드리스 검증
 - 유닛: `data/units.ts`의 `UNITS`에 객체 하나. `skill(b, f)`에서 `b.damage`·`b.summon`·`b.inRadius` 등을 쓴다.
 - 증강체: `data/augments.ts`의 `AUGMENTS`에 객체 하나. 전투 효과는 `mod`(훅), 획득 즉시 효과는 `onPick`.
 - 공명: `RESONANCES`에 `pair` 두 개를 적고, 해당 증강체 훅에서 `has('res_…')`로 분기.
-- 난이도: `data/enemies.ts`의 `enemyMult` 한 줄과 보스 수치. 바꾼 뒤 `npm test`의 봇 클리어율·라운드별 결과를 본다.
+- 편성: `data/enemies.ts`의 `ENCOUNTERS`에 `{ name, from, hint, make }` 한 줄. 적 고유 기믹은 `own()` 훅(`onDeath`·`onLethal`·`onAttack`)으로, 정예 접두사는 `AFFIXES`, 정예 후보는 `ELITES`.
+- 난이도: `data/enemies.ts`의 `enemyMult` 한 줄과 정예·보스 수치. 바꾼 뒤 `node scripts/levels.ts 1000`으로 라운드별·편성별 승률을 본다.
+- 영웅 패시브: `heroes.ts`의 `PASSIVES`에 Mod를 돌려주는 함수 하나. 스킬은 스킬이 있는 유닛·적이면 자동으로 목록에 들어간다.
 
 ## 출처
 

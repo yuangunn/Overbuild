@@ -49,6 +49,11 @@ kbd { font: 12px Galmuri11, monospace; color: var(--k); background: var(--lgrey)
 .pill.gold b { color: var(--gold) } .pill.warn { border-image-source: url(./assets/ui/p1-gold.png); color: var(--yellow) }
 .pill.wave.elite { border-image-source: url(./assets/ui/p1-plum.png); color: var(--skin) } .pill.wave.boss { border-image-source: url(./assets/ui/p1-red.png); color: var(--red); animation: blink 1s steps(2) infinite }
 .pill.lives { gap: 0 }
+.pill.next { color: var(--skin); cursor: help } .pill.next .spr { width: 16px; height: 16px }
+.hud { max-width: 100% } .hud > span { flex: none }
+.hud .gimmick { display: inline-flex; align-items: center; gap: 4px; color: var(--yellow); font-weight: 400; flex: 0 1 auto; min-width: 0 }
+.hud .gimmick > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.tok.enemy.aff .base { border-width: 3px; animation: blink 1.2s steps(2) infinite }
 
 /* ── 타이틀 */
 .title-screen { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center; padding: 16px }
@@ -272,3 +277,62 @@ kbd { font: 12px Galmuri11, monospace; color: var(--k); background: var(--lgrey)
 .counts .chip { animation: pop .3s calc(.5s + var(--i) * .07s) steps(4) both }
 @keyframes pop { from { transform: scale(0); opacity: 0 } }
 .end h1 { animation: punch .5s steps(6) both }
+
+/* ── 샌드박스 */
+button.ghost.on { border-image-source: url(./assets/ui/b1-blue.png) }
+button.tiny { padding: 0 4px; border-width: 3px }
+button.danger { border-image-source: url(./assets/ui/b2-red.png) }
+.pill.sandpill { color: var(--yellow); border-image-source: url(./assets/ui/p1-gold.png) }
+.bottom.sand { grid-template-columns: minmax(0, 1fr) }
+.palette { padding: 2px 6px 4px; border: 8px solid transparent; border-image: url(./assets/ui/p2-grey.png) 8 fill / 8px }
+.drag-unit .palette { border-image-source: url(./assets/ui/p2-gold.png) }
+.palette .lbl { flex-wrap: wrap; gap: 4px }
+.pal-grid { display: grid; grid-template-columns: repeat(auto-fill, 76px); gap: 4px; height: 140px; overflow: auto; align-content: start }
+.pcard { display: flex; flex-direction: column; align-items: center; padding: 2px; cursor: pointer; text-align: center; line-height: 14px; word-break: keep-all; min-height: 66px;
+  border: 4px solid transparent; border-image: url(./assets/ui/p1-plum.png) 4 fill / 4px }
+.pcard .spr, .pcard .ico { width: 32px; height: 32px; flex: none } .pcard:hover { filter: brightness(1.25) }
+.pcard.on { border-image-source: url(./assets/ui/p1-gold.png); color: var(--yellow); animation: bob .6s steps(2) infinite }
+.sand-augs .aug-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px }
+.sand-augs .aug-row { cursor: pointer; margin: 0; padding: 0 2px; overflow: hidden; white-space: nowrap; gap: 2px }
+.sand-augs .aug-row span { overflow: hidden; text-overflow: ellipsis }
+.sand-augs .aug-row.off { filter: grayscale(1) brightness(.55) } .sand-augs .aug-row.off:hover { filter: grayscale(.4) brightness(.9) }
+.sand-augs button { margin-top: 6px }
+.sandbox .cell[data-drop]:hover { outline: 2px solid var(--yellow); outline-offset: -6px; cursor: pointer }
+.mrow .tk { font-style: normal; color: var(--skin); text-align: right; white-space: nowrap }
+.sandbox .mrow { grid-template-columns: 190px 1fr 56px 96px }
+
+/* ── 나만의 영웅 */
+.page.heroes { max-width: 1340px; display: flex; flex-direction: column; gap: 10px; overflow: hidden }
+.hero-wrap { flex: 1; min-height: 0; display: grid; grid-template-columns: 200px minmax(0, 1fr) 340px; gap: 10px }
+.hero-list { display: flex; flex-direction: column; gap: 4px; padding: 6px }
+.hero-item { display: flex; align-items: center; gap: 6px; padding: 0 4px; cursor: pointer; border: 4px solid transparent; border-image: url(./assets/ui/p1-plum.png) 4 fill / 4px }
+.hero-item.on { border-image-source: url(./assets/ui/p1-gold.png) } .hero-item:hover { filter: brightness(1.2) }
+.hero-item b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.hero-empty { padding: 16px } .hero-empty p { margin: 8px 0 }
+.hero-edit { padding: 6px 12px; display: flex; flex-direction: column; gap: 10px }
+#hero-prev { display: flex; gap: 14px; align-items: flex-start; padding-bottom: 10px; border-bottom: 2px dashed var(--grey); min-height: 132px }
+.hp-art { flex: none; width: 116px; height: 116px; display: grid; place-items: center; background: var(--k); box-shadow: 0 0 0 2px var(--grey), 0 0 0 4px var(--k) }
+.spr.huge { width: 96px; height: 96px }
+.hp-body { display: flex; flex-direction: column; gap: 3px; min-width: 0 } .hp-body h3 { font-size: 24px; line-height: 1.1 }
+.hp-body .stats { color: var(--skin) } .hp-body .skill { color: var(--cyan) } .hp-body .grade b { color: var(--yellow); font-size: 24px; vertical-align: -2px }
+.hero-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; align-items: center }
+.fld { display: flex; align-items: center; gap: 8px; min-width: 0 } .fld.full { grid-column: 1 / -1 }
+.fld > span:first-child { flex: none; width: 76px; color: var(--skin); font-weight: 700 } .fld > span i { font-style: normal; font-weight: 400; display: block }
+.fld input[type=range] { flex: 1; min-width: 0 } .fld b { flex: none; width: 64px; text-align: right; color: var(--yellow) }
+.fld select, .fld input[type=text] { flex: 1; min-width: 0 }
+.chip.tbtn { cursor: pointer; opacity: .45 } .chip.tbtn.on { opacity: 1; border-image-source: url(./assets/ui/p1-gold.png) }
+.hero-spr { padding: 4px 6px; display: flex; flex-direction: column; gap: 6px; min-height: 0 }
+.hero-spr .tabs { display: flex; flex-wrap: wrap; gap: 2px }
+.spr-grid { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, 38px); gap: 2px; align-content: start }
+.spr-grid .pick { width: 38px; height: 38px; display: grid; place-items: center; cursor: pointer; background: var(--k) }
+.spr-grid .pick .spr { width: 32px; height: 32px } .spr-grid .pick:hover { background: var(--plum) }
+.spr-grid .pick.on { background: var(--brown); box-shadow: inset 0 0 0 2px var(--yellow) }
+
+/* 입력 칸: 픽셀 테두리, 네모난 손잡이 */
+input[type=text], select { font: inherit; color: var(--white); background: var(--k); border: 4px solid transparent; border-image: url(./assets/ui/p1-grey.png) 4 fill / 4px; padding: 0 4px; height: 28px; outline: none; user-select: text }
+input[type=text]:focus, select:focus { border-image-source: url(./assets/ui/p1-gold.png) }
+option, optgroup { background: var(--k); color: var(--white) }
+input[type=range] { -webkit-appearance: none; appearance: none; height: 8px; background: var(--plum); box-shadow: 0 0 0 2px var(--k); margin: 0 4px; cursor: pointer }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 18px; background: var(--yellow); box-shadow: 0 0 0 2px var(--k), inset -2px -2px 0 var(--orange) }
+input[type=range]::-moz-range-thumb { width: 12px; height: 18px; border: 0; border-radius: 0; background: var(--yellow) }
+.hp-body h3 { color: var(--white) } .hp-body h3::before { display: none }

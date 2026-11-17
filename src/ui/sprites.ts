@@ -1,11 +1,11 @@
 // 캐릭터 도트: DawnLike 16x16 (DragonDePlatino, CC-BY 4.0 · 팔레트 DawnBringer) — public/sprites/dawnlike/
 // 시트마다 0·1 두 장이 2프레임 애니메이션이다. 사람형·언데드·정령·악마는 오른쪽, 짐승류는 왼쪽을 본다.
-type Sheet = 'Humanoid' | 'Undead' | 'Demon' | 'Dog' | 'Pest' | 'Quadraped' | 'Elemental' | 'Avian' | 'Slime' | 'Reptile'
+export type Sheet = 'Humanoid' | 'Undead' | 'Demon' | 'Dog' | 'Pest' | 'Quadraped' | 'Elemental' | 'Avian' | 'Slime' | 'Reptile'
 
 const SHEET_H: Record<Sheet, number> = { Humanoid: 432, Undead: 160, Demon: 144, Dog: 112, Pest: 176, Quadraped: 192, Elemental: 176, Avian: 208, Slime: 80, Reptile: 248 }
 const SHEET_W = 128
 
-// 템플릿 id → [시트, 열, 행]
+// 템플릿 id → [시트, 열, 행] (나만의 영웅은 app이 실행 중에 더한다)
 export const SPR: Record<string, [Sheet, number, number]> = {
   // 아군
   shieldbearer: ['Humanoid', 3, 4], apprentice: ['Humanoid', 3, 10], ranger: ['Humanoid', 1, 5], cutthroat: ['Humanoid', 5, 2],
@@ -18,6 +18,9 @@ export const SPR: Record<string, [Sheet, number, number]> = {
   slime: ['Slime', 0, 3], goblin: ['Humanoid', 4, 8], thrower: ['Humanoid', 1, 2], orc: ['Humanoid', 0, 7], bat: ['Avian', 2, 11],
   shaman: ['Reptile', 0, 7], skelarcher: ['Undead', 5, 2], demon: ['Demon', 1, 1], spider: ['Pest', 2, 2], troll: ['Humanoid', 0, 0],
   scorpion: ['Pest', 4, 2], boss: ['Demon', 6, 2],
+  // 기믹 적·정예
+  kingslime: ['Slime', 2, 3], slimelet: ['Slime', 1, 3], bomber: ['Humanoid', 1, 8], treasure: ['Humanoid', 0, 8],
+  priest: ['Undead', 1, 7], wraith: ['Undead', 1, 3], goblinking: ['Humanoid', 3, 8], lich: ['Undead', 6, 2],
   // 작가 요청: 이 스프라이트를 게임 어딘가에 숨겨 둘 것
   platino: ['Reptile', 3, 12],
 }
@@ -85,14 +88,33 @@ export function drawSprite(ctx: CanvasRenderingContext2D, id: string, frame: num
 
 // ── DOM용: 요소 크기에 맞춰 늘어나는 배경 스프라이트 (2프레임은 CSS 애니메이션)
 export function sprHTML(id: string, fallback: string, cls = '', side = 0): string {
-  const flip = flipFor(id, side)
   const m = SPR[id]
   if (!m) return `<span class="em ${cls}">${fallback}</span>`
-  const [s, c, r] = m
+  return sprAt(m[0], m[1], m[2], cls, flipFor(id, side))
+}
+
+export function sprAt(s: Sheet, c: number, r: number, cls = '', flip = false): string {
   const h = SHEET_H[s]
   const bx = ((c * 16) / (SHEET_W - 16)) * 100, by = ((r * 16) / (h - 16)) * 100
   return `<span class="spr ${cls}${flip ? ' flip' : ''}" style="--s0:url(${url(s, 0)});--s1:url(${url(s, 1)});background-size:${(SHEET_W / 16) * 100}% ${(h / 16) * 100}%;background-position:${bx}% ${by}%"></span>`
 }
+
+// 영웅 외형 고르기: 시트마다 그림이 있는 칸 (PNG 알파에서 한 번 뽑아 둔 값, 8열·행 우선, 1 = 있음)
+export const SHEET_NAMES: Record<Sheet, string> = { Humanoid: '사람', Undead: '언데드', Demon: '악마', Dog: '개', Pest: '벌레', Quadraped: '네발', Elemental: '정령', Avian: '새', Slime: '슬라임', Reptile: '파충류' }
+const CELLS: Record<Sheet, string> = {
+  Humanoid: '111111111110000011111111111111111111111011111110111111001111100011111000111110001111000011110000111100001111000011100000111000001110000011100000111000001110000011000000110000001100000011000000110000001100000010000000',
+  Undead: '11111111111111111111111111110000111100001110000011100000111000001100000011000000',
+  Demon: '111111111111111111111110111000001110000011000000110000001100000011000000',
+  Dog: '11111100111111001110000011100000111000001110000000000000',
+  Pest: '1111111111111100111111001111100011110000111100001110000011110000110000001100000011000000',
+  Quadraped: '111111111111111011111100111111001111000011110000111000001110000011000000110000001100000011000000',
+  Elemental: '1111111111111100111111001111100011110000111000001110000011100000111000001100000011000000',
+  Avian: '11111111111111111111110011111111111111111111111111111111111111001111110011110000111100001111100011000000',
+  Slime: '1111110011100000111000001110000011000000',
+  Reptile: '111111111111111111111111111111001111111111111111110000001111000011100000110000001111000011100000000111001111111111111111',
+}
+export const cellsOf = (s: Sheet): [number, number][] => [...CELLS[s]].flatMap((b, i) => (b === '1' ? [[i % 8, Math.floor(i / 8)] as [number, number]] : []))
+export const isSheet = (s: string): s is Sheet => s in SHEET_H
 
 // ── 아이콘: DawnLike 아이템·GUI·장식 시트 (한 장짜리, 16px 칸). [시트, 열, 행]
 const ISHEET: Record<string, [number, number]> = {

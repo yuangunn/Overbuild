@@ -21,6 +21,8 @@ export interface UnitTpl {
   size?: number
   boss?: boolean
   locked?: boolean // 영구 성장으로 해금
+  custom?: boolean // 나만의 영웅 (샌드박스 전용)
+  flee?: number // 싸우지 않고 도망치다 이 초가 지나면 사라진다 (보물 고블린)
   skillName: string
   skillDesc: string
   skill?: (b: Battle, f: Fighter) => void

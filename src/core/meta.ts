@@ -1,10 +1,13 @@
 // 영구 성장 + 저장. localStorage가 없거나 막혀도(테스트·사생활 모드) 기본값으로 동작한다.
 import type { RunState } from './run.ts'
+import { cleanHero, type HeroDef } from './heroes.ts'
 
 export interface Meta { shards: number; unlocked: string[]; best: number; runs: number; wins: number; found: string[]; speed: number }
 
 const KEY = 'overbuild:meta:v1'
 const RUN_KEY = 'overbuild:run:v1'
+const HERO_KEY = 'overbuild:heroes:v1'
+const SAND_KEY = 'overbuild:sandbox:v1'
 const DEF: Meta = { shards: 0, unlocked: [], best: 0, runs: 0, wins: 0, found: [], speed: 1 }
 
 export const UNLOCKS = [
@@ -35,6 +38,13 @@ export const loadMeta = (): Meta => ({ ...DEF, ...read<Partial<Meta>>(KEY) })
 export const saveMeta = (m: Meta) => write(KEY, m)
 export const loadRun = (): RunState | null => read<RunState>(RUN_KEY)
 export const saveRun = (s: RunState | null) => write(RUN_KEY, s)
+export function loadHeroes(): HeroDef[] {
+  const v = read<Partial<HeroDef>[]>(HERO_KEY)
+  return (Array.isArray(v) ? v : []).map(h => cleanHero(h)).filter((h): h is HeroDef => !!h)
+}
+export const saveHeroes = (h: HeroDef[]) => write(HERO_KEY, h)
+export const loadSand = (): RunState | null => read<RunState>(SAND_KEY)
+export const saveSand = (s: RunState) => write(SAND_KEY, s)
 
 export function buyUnlock(m: Meta, id: string): string | null {
   const u = UNLOCKS.find(x => x.id === id)

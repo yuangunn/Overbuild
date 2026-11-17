@@ -495,6 +495,8 @@ export function playBattle(cv: HTMLCanvasElement, b: Battle, speed: () => number
     if (f.invulnT > 0 && f.st.ls) { const hb = 0.6 + 0.4 * Math.abs(Math.sin(clock * 9)); aura('#ffd54a', hb, 1.3); sx *= 1 + 0.06 * hb; sy *= 1 + 0.06 * hb }
     if (a.castT < 0.35) aura(traitColor(f), 1 - a.castT / 0.35, 1.4)
     if (f.boss) aura('#ff2d55', 0.4 + 0.2 * Math.sin(clock * 4), 1.15)
+    const glow = f.glow || (f.tpl.flee ? '#dad45e' : '')
+    if (glow) aura(glow, 0.45 + 0.15 * Math.sin(clock * 6 + f.uid), 1.05)
     if (f.tpl.id === 'spirit' || f.tpl.id === 'shade') aura(f.tpl.id === 'spirit' ? '#7fffd4' : '#d18cff', 0.5, 0.9)
     ctx.globalCompositeOperation = 'source-over'
 

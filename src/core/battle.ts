@@ -36,6 +36,7 @@ export interface Mod {
   onDamaged?(b: Battle, f: Fighter, src: Fighter | null, dealt: number): void
   onLethal?(b: Battle, f: Fighter): boolean // true면 죽음을 막는다
   onAllyDeath?(b: Battle, dead: Fighter, killer: Fighter | null): void
+  onDeath?(b: Battle, f: Fighter, killer: Fighter | null): void // own 전용: 이 유닛이 쓰러질 때 (분열·자폭)
   onEnemyDeath?(b: Battle, dead: Fighter, killer: Fighter | null): void
 }
 
@@ -83,6 +84,8 @@ export interface Fighter {
   st: Record<string, number> // 훅이 쓰는 개별 상태
   own: Mod[] // 이 유닛에만 붙는 훅 (아이템, 고유 패시브)
   dealt: number
+  taken: number
+  glow: string // 접두사 정예의 오라 색 ('' = 없음)
   owner: number | null // 런의 OwnedUnit.id (피해 집계용)
 }
 
@@ -119,7 +122,7 @@ export function makeFighter(tpl: UnitTpl, star: number, side: Side, x: number, y
     spell: 1, dmgMult: 1, asBonus: 0, lifesteal: 0, overheal: false, skillCrit: false,
     cd: 0.15, retarget: 0, target: null,
     alive: true, summoned: false, gen: 0, boss: !!tpl.boss,
-    stunT: 0, slowT: 0, invulnT: 0, buffs: [], st: { mult }, own: tpl.own?.() ?? [], dealt: 0, owner: null,
+    stunT: 0, slowT: 0, invulnT: 0, buffs: [], st: { mult }, own: tpl.own?.() ?? [], dealt: 0, taken: 0, glow: '', owner: null,
   }
 }
 
@@ -192,6 +195,7 @@ export class Battle {
     if (f.stunT > 0) { f.stunT -= dt; return }
     if (f.cd > 0) f.cd -= dt
     if (f.maxMana > 0 && f.mana >= f.maxMana) { this.cast(f); return }
+    if (f.tpl.flee) { this.flee(f, dt); return }
     if (!f.target?.alive || (f.retarget -= dt) <= 0) {
       f.target = this.nearest(f.x, f.y, this.foe(f))
       f.retarget = 0.5
@@ -208,6 +212,26 @@ export class Battle {
       this.attack(f, t)
       f.cd = 1 / this.atkSpeed(f)
     }
+  }
+
+  // 보물 고블린: 싸우지 않고 가장 가까운 적에게서 멀어지다가 flee초가 지나면 사라진다
+  private flee(f: Fighter, dt: number) {
+    f.st.flee = (f.st.flee ?? 0) + dt
+    if (f.st.flee >= f.tpl.flee!) {
+      f.alive = false
+      this.count('escaped')
+      this.emit({ k: 'tele', uid: f.uid, x1: f.x, y1: f.y })
+      this.emit({ k: 'text', x: f.x, y: f.y - f.size, text: '도망쳤다!', color: '#dad45e' })
+      return
+    }
+    const e = this.nearest(f.x, f.y, this.foe(f))
+    if (!e) return
+    const d = Math.max(0.01, dist(e, f.x, f.y))
+    const sp = f.speed * (f.slowT > 0 ? 0.6 : 1) * dt
+    f.x += ((f.x - e.x) / d) * sp
+    f.y += ((f.y - e.y) / d) * sp + Math.sin(this.t * 3 + f.uid) * sp * 0.6
+    f.x = clamp(f.x, 0.7, W - 0.7) // 전장 끝에서 그림이 잘리지 않게
+    f.y = clamp(f.y, 0.7, H - 0.7)
   }
 
   atkSpeed(f: Fighter) {
@@ -273,6 +297,7 @@ export class Battle {
       v -= a
     }
     t.hp -= v
+    t.taken += dealt
     if (t.maxMana > 0 && !t.boss) t.mana += Math.min(10, (dealt / t.maxHp) * 70) * t.manaGain
     this.emit({ k: 'hit', uid: t.uid, x: t.x, y: t.y, v: dealt, crit, kind: info.kind, side: t.side, pct: dealt / t.maxHp, sx: src?.x, sy: src?.y })
     if (src) {
@@ -304,6 +329,7 @@ export class Battle {
     t.hp = 0
     t.shield = 0
     this.emit({ k: 'death', uid: t.uid, tpl: t.tpl.id, x: t.x, y: t.y, emoji: t.emoji, size: t.size, side: t.side, boss: t.boss, summoned: t.summoned })
+    for (const m of t.own) m.onDeath?.(this, t, src)
     for (const m of this.mods[this.foe(t)]) m.onEnemyDeath?.(this, t, src)
     for (const m of this.mods[t.side]) m.onAllyDeath?.(this, t, src)
   }
