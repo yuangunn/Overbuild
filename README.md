@@ -55,6 +55,9 @@ scripts/sim.ts       헤드리스 검증
 
 ## 출처
 
-- 캐릭터 도트: [DawnLike 16x16 Universal Rogue-like tileset v1.81](https://opengameart.org/content/dawnlike-16x16-universal-rogue-like-tileset-v181) — DragonDePlatino, CC-BY 4.0. 팔레트: DawnBringer. 원본 라이선스 문서는 `public/sprites/dawnlike/README.txt`.
+- 캐릭터·아이콘·바닥 도트: [DawnLike 16x16 Universal Rogue-like tileset v1.81](https://opengameart.org/content/dawnlike-16x16-universal-rogue-like-tileset-v181) — DragonDePlatino, CC-BY 4.0. 팔레트: DawnBringer. 원본 라이선스 문서는 `public/sprites/dawnlike/README.txt`.
+  - UI 패널 테두리(`src/assets/ui/p*`)는 DawnLike `GUI0.png`의 패널을 12px 9분할로 잘라 2배 키운 것, 버튼(`b*`)은 같은 팔레트로 만든 것.
   - 작가 요청에 따라 Platino 스프라이트가 게임 안 어딘가에 숨어 있다.
+- 글꼴: [갈무리](https://github.com/quiple/galmuri) (Galmuri11) — quiple, SIL OFL 1.1. 자주 쓰는 한글 2,350자와 게임에 쓰인 글자로 줄여서 넣었다(`src/assets/fonts`). 라이선스 문서는 `public/fonts/OFL.txt`.
 - 유닛·적과 스프라이트 대응표는 `src/ui/sprites.ts`의 `SPR`. 새 유닛은 여기에 `[시트, 열, 행]` 한 줄을 더한다 (없으면 이모지로 그린다).
+- 아이템·증강체·특성·공명 아이콘은 같은 파일의 `ICON` (DawnLike 아이템 시트). 없으면 이모지로 그린다.

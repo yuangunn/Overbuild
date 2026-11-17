@@ -94,4 +94,61 @@ export function sprHTML(id: string, fallback: string, cls = '', side = 0): strin
   return `<span class="spr ${cls}${flip ? ' flip' : ''}" style="--s0:url(${url(s, 0)});--s1:url(${url(s, 1)});background-size:${(SHEET_W / 16) * 100}% ${(h / 16) * 100}%;background-position:${bx}% ${by}%"></span>`
 }
 
-export const CREDITS = '캐릭터 도트: DawnLike by DragonDePlatino (CC-BY 4.0) · 팔레트: DawnBringer'
+// ── 아이콘: DawnLike 아이템·GUI·장식 시트 (한 장짜리, 16px 칸). [시트, 열, 행]
+const ISHEET: Record<string, [number, number]> = {
+  Ammo: [8, 6], Amulet: [8, 3], Armor: [8, 9], Book: [8, 9], Boot: [8, 2], Chest0: [8, 3], Decor: [8, 22], Flesh: [8, 9], Food: [8, 6], GUI: [16, 19],
+  Glove: [8, 1], Hat: [8, 4], Key: [8, 1], LongWep: [8, 7], MedWep: [8, 2], Money: [8, 8], Music: [8, 6], Potion: [8, 5], Ring: [8, 6], Rock: [8, 2],
+  Scroll: [8, 6], Shield: [8, 1], ShortWep: [8, 5], Tool: [8, 3], Wand: [8, 7],
+}
+const TRAIT_ICON: Record<string, [string, number, number]> = {
+  guard: ['Shield', 4, 0], arcane: ['Tool', 1, 0], hunter: ['Ammo', 0, 1], shadow: ['ShortWep', 0, 0], undead: ['Decor', 2, 17], beast: ['Flesh', 1, 3],
+}
+export const ICON: Record<string, [string, number, number]> = {
+  // 아이템
+  sword: ['LongWep', 0, 1], feather: ['Tool', 4, 0], helm: ['Hat', 1, 0], crystal: ['Money', 1, 2], dice: ['ShortWep', 4, 0],
+  fang: ['Amulet', 3, 1], charm: ['Amulet', 0, 0], rune: ['Scroll', 3, 1], ring: ['Ring', 2, 0],
+  // 특성 (문장 증강체도 같은 아이콘)
+  ...TRAIT_ICON, ...Object.fromEntries(Object.entries(TRAIT_ICON).map(([k, v]) => ['crest_' + k, v])),
+  // 증강체
+  echo: ['Music', 0, 4], chain: ['LongWep', 1, 5], soulpact: ['Scroll', 0, 0], frenzy: ['Potion', 1, 4], laststand: ['Shield', 0, 0],
+  manasurge: ['Potion', 7, 0], vamp: ['Potion', 0, 0], giant: ['Rock', 2, 1], executioner: ['MedWep', 1, 1], corpse: ['Potion', 2, 3],
+  lonehero: ['LongWep', 3, 1], growth: ['Food', 4, 0], midas: ['Glove', 2, 0], multishot: ['Ammo', 2, 2], overload: ['Wand', 2, 0],
+  martyr: ['Decor', 2, 8], duplicate: ['Tool', 0, 0], armory: ['Chest0', 1, 0], smite: ['Wand', 1, 1], timewarp: ['GUI', 10, 4], splitsoul: ['Potion', 4, 3],
+  // 공명
+  res_infinite: ['Ring', 3, 0], res_storm: ['Potion', 3, 3], res_bomb: ['Potion', 0, 4], res_bloodfrenzy: ['Ring', 6, 4], res_titan: ['Armor', 6, 0],
+  res_execution: ['Decor', 6, 10], res_shotgun: ['Ammo', 0, 0], res_legend: ['Hat', 2, 3], res_march: ['Decor', 0, 17], res_thunder: ['GUI', 12, 4],
+  // 영구 성장
+  gold: ['Money', 0, 0], augroll: ['Tool', 2, 0], shop6: ['Chest0', 0, 0], life: ['GUI', 0, 1], startaug: ['Boot', 1, 0],
+  // 화면 요소
+  heart: ['GUI', 0, 1], heart0: ['GUI', 4, 1], coin: ['Money', 0, 0], shard: ['Rock', 2, 0], codex: ['Book', 1, 0], wave: ['MedWep', 0, 0],
+  elite: ['GUI', 11, 3], boss: ['Hat', 2, 3], train: ['Scroll', 4, 0], slot: ['Key', 0, 0],
+}
+
+const iconUrl = (s: string) => `${import.meta.env.BASE_URL}sprites/dawnlike/items/${s}.png`
+const iconImgs = new Map<string, HTMLImageElement>()
+for (const s of Object.keys(ISHEET)) { const im = new Image(); im.src = iconUrl(s); iconImgs.set(s, im) }
+
+// DOM: 크기는 CSS(.ico.s16/s32/s48/s64)가 정한다. 16의 배수라 도트가 고르게 커진다
+export function iconHTML(id: string, cls = 's16'): string {
+  const m = ICON[id]
+  if (!m) return ''
+  const [s, c, r] = m, [w, h] = ISHEET[s]
+  return `<i class="ico ${cls}" style="background-image:url(${iconUrl(s)});--w:${w};--h:${h};--c:${c};--r:${r}"></i>`
+}
+
+// 캔버스: (x, y) 가운데에 size 크기로
+export function drawIcon(ctx: CanvasRenderingContext2D, id: string, x: number, y: number, size: number): boolean {
+  const m = ICON[id], im = m && iconImgs.get(m[0])
+  if (!m || !im?.complete || !im.naturalWidth) return false
+  ctx.imageSmoothingEnabled = false
+  ctx.drawImage(im, m[1] * 16, m[2] * 16, 16, 16, x - size / 2, y - size / 2, size, size)
+  return true
+}
+
+// 구역 바닥 타일 (Objects/Floor.png, 7×3 묶음의 가운데 칸)
+const floorImg = new Image()
+floorImg.src = `${import.meta.env.BASE_URL}sprites/dawnlike/Floor.png`
+export const floorReady = () => floorImg.complete && floorImg.naturalWidth > 0
+export { floorImg }
+
+export const CREDITS = '캐릭터·UI 도트: DawnLike by DragonDePlatino (CC-BY 4.0) · 팔레트: DawnBringer · 글꼴: 갈무리 (OFL)'

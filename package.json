@@ -1,11 +1,11 @@
 {
   "name": "overbuild",
   "private": true,
-  "version": "0.1.0-beta",
+  "version": "0.2.0-beta",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build --base=./ && node scripts/inline.js",
+    "build": "tsc && vite build --base=./ --assetsInlineLimit 100000 && node scripts/inline.js",
     "preview": "vite preview",
     "test": "node scripts/sim.ts"
   },

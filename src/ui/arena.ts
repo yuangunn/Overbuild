@@ -1,13 +1,14 @@
 // 전투 재생: Battle을 고정 스텝으로 돌리며 캔버스에 그린다. 게임 규칙은 모르고 Fx 이벤트만 해석한다.
 // 연출 층: 배경(구역별) → 잔해 → 유닛(동작·오라) → 파티클 → 궤적 → 숫자·글자 → 배너·컷인 → 화면 효과
 import { W, H, STEP, type Battle, type Fx, type FxStyle, type Fighter } from '../core/battle.ts'
-import { drawSprite, flipFor } from './sprites.ts'
+import { drawSprite, flipFor, drawIcon, floorImg, floorReady } from './sprites.ts'
 
 export interface Player { skip(): void; stop(): void }
 export interface ResInfo { id: string; name: string; emoji: string; ids: string[]; a: string; b: string }
 export interface PlayOpts { zone: number; res: ResInfo[] }
 
 const EMOJI = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'
+const PIX = 'Galmuri11, monospace'
 const TAU = Math.PI * 2
 const rnd = (a: number, b: number) => a + Math.random() * (b - a)
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
@@ -24,6 +25,49 @@ const ZONES = [
   { top: '#1f1230', bot: '#0a0610', pool: '#7a3fb8', speck: '#2c1a40', crack: '#b04dff', amb: 'ember' },
   { top: '#2e0f18', bot: '#0b0406', pool: '#b8324c', speck: '#3a1018', crack: '#ff4d3c', amb: 'ember' },
 ] as const
+
+// 구역 바닥: Floor.png 7×3 묶음의 가운데 칸 [기본, 섞을 타일]. 16px 타일을 원래 크기로 깔고(줌 여유 포함) 화면에서 키운다
+const FLOOR: [number, number][][] = [[[8, 7], [8, 10]], [[1, 7], [1, 10]], [[8, 13], [1, 13]], [[15, 10], [15, 13]]]
+const PAD_X = 3, PAD_Y = 2 // 전장 밖 여유 타일 수
+const floorCache = new Map<number, HTMLCanvasElement>()
+export function zoneFloor(zone: number): HTMLCanvasElement | null {
+  const hit = floorCache.get(zone)
+  if (hit) return hit
+  if (!floorReady()) return null
+  const tw = W * 2 + PAD_X * 2, th = H * 2 + PAD_Y * 2
+  const c = document.createElement('canvas')
+  c.width = tw * 16; c.height = th * 16
+  const g = c.getContext('2d')!
+  let seed = 7 + zone * 13
+  const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+  const [a, b] = FLOOR[zone]
+  for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
+    const t = r() < 0.18 ? b : a
+    g.drawImage(floorImg, t[0] * 16, t[1] * 16, 16, 16, x * 16, y * 16, 16, 16)
+  }
+  g.fillStyle = 'rgba(20,12,28,0.38)'
+  g.fillRect(0, 0, c.width, c.height)
+  // 아군·적 진영 칸 (1px 선, 원래 해상도)
+  for (const side of [0, 1]) {
+    g.strokeStyle = side ? 'rgba(208,70,72,0.55)' : 'rgba(89,125,206,0.6)'
+    g.lineWidth = 1
+    for (let c2 = 0; c2 < 3; c2++) for (let row = 0; row < 4; row++) {
+      const cx = Math.round(((side ? 6.3 + c2 : 0.7 + c2) + PAD_X / 2) * 32), cy = ((0.5 + row) + PAD_Y / 2) * 32
+      g.strokeRect(cx - 14 + 0.5, cy - 14 + 0.5, 27, 27)
+    }
+  }
+  floorCache.set(zone, c)
+  return c
+}
+// 전장(W×H)에 해당하는 부분을 dx,dy,dw,dh에 그린다. m은 사방 여유 비율(0.15면 15%씩 더)
+export function drawFloor(g: CanvasRenderingContext2D, zone: number, dx: number, dy: number, dw: number, dh: number, m = 0): boolean {
+  const f = zoneFloor(zone)
+  if (!f) return false
+  const aw = W * 32, ah = H * 32
+  g.imageSmoothingEnabled = false
+  g.drawImage(f, PAD_X * 16 - aw * m, PAD_Y * 16 - ah * m, aw * (1 + 2 * m), ah * (1 + 2 * m), dx, dy, dw, dh)
+  return true
+}
 
 // 색 이름은 Fx의 color를 그대로 쓰되, 스타일마다 파티클 모양이 다르다
 const STYLE_COLORS: Partial<Record<FxStyle, string[]>> = {
@@ -340,8 +384,8 @@ export function playBattle(cv: HTMLCanvasElement, b: Battle, speed: () => number
   }
 
   const background = (cw: number, ch: number, s: number) => {
-    const key = `${cw}x${ch}`
-    if (key !== bgKey) { bg = renderBg(cw, ch, s); bgKey = key }
+    const key = `${cw}x${ch}:${floorReady()}`
+    if (key !== bgKey) { bg = renderBg(cw, ch); bgKey = key }
     // 줌으로 가장자리가 비지 않게 화면보다 넓게 깐다
     ctx.drawImage(bg!, -cw * 0.15, -ch * 0.15, cw * 1.3, ch * 1.3)
     if (zone.crack && opts.zone >= 2) {
@@ -356,50 +400,13 @@ export function playBattle(cv: HTMLCanvasElement, b: Battle, speed: () => number
     }
   }
 
-  const renderBg = (cw: number, ch: number, s: number) => {
+  const renderBg = (cw: number, ch: number) => {
     const c = document.createElement('canvas')
     const w = Math.round(cw * 1.3), h = Math.round(ch * 1.3)
     c.width = w; c.height = h
     const g = c.getContext('2d')!
-    const ox = cw * 0.15, oy = ch * 0.15
-    const lg = g.createLinearGradient(0, 0, 0, h)
-    lg.addColorStop(0, zone.top); lg.addColorStop(1, zone.bot)
-    g.fillStyle = lg; g.fillRect(0, 0, w, h)
-    const rg = g.createRadialGradient(w / 2, h * 0.58, 0, w / 2, h * 0.58, w * 0.45)
-    rg.addColorStop(0, zone.pool + '40'); rg.addColorStop(1, '#00000000')
-    g.fillStyle = rg; g.fillRect(0, 0, w, h)
-    // 바닥 얼룩 (구역마다 같은 모양이 나오게 고정 난수)
-    let seed = 17 + opts.zone * 31
-    const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
-    for (let i = 0; i < 160; i++) {
-      g.globalAlpha = 0.25 + r() * 0.35
-      g.fillStyle = zone.speck
-      g.beginPath(); g.ellipse(r() * w, r() * h, 4 + r() * 26, 2 + r() * 10, 0, 0, TAU); g.fill()
-    }
-    g.globalAlpha = 1
-    if (opts.zone === 0) { // 풀
-      g.strokeStyle = '#3f6b3c'; g.lineWidth = 1.5
-      for (let i = 0; i < 220; i++) { const x = r() * w, y = r() * h; g.globalAlpha = 0.35 + r() * 0.4; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (r() - 0.5) * 4, y - 4 - r() * 6); g.stroke() }
-    } else if (zone.crack) { // 균열
-      g.strokeStyle = zone.crack; g.lineWidth = opts.zone >= 2 ? 1.6 : 1
-      for (let i = 0; i < 14; i++) {
-        let x = r() * w, y = r() * h
-        g.globalAlpha = opts.zone >= 2 ? 0.55 : 0.4
-        g.beginPath(); g.moveTo(x, y)
-        for (let j = 0; j < 6; j++) { x += (r() - 0.5) * 60; y += (r() - 0.5) * 30; g.lineTo(x, y) }
-        g.stroke()
-      }
-    }
-    g.globalAlpha = 1
-    // 아군·적 진영 칸
-    for (const side of [0, 1]) {
-      g.strokeStyle = side ? '#ff5d6c22' : '#4fd1ff22'
-      g.lineWidth = 1
-      for (let c2 = 0; c2 < 3; c2++) for (let row = 0; row < 4; row++) {
-        const x = (side ? 6.3 + c2 : 0.7 + c2) * s + ox, y = (0.5 + row) * s + oy
-        g.strokeRect(x - s * 0.44, y - s * 0.44, s * 0.88, s * 0.88)
-      }
-    }
+    g.fillStyle = zone.bot; g.fillRect(0, 0, w, h)
+    drawFloor(g, opts.zone, 0, 0, w, h, 0.15)
     return c
   }
 
@@ -509,28 +516,32 @@ export function playBattle(cv: HTMLCanvasElement, b: Battle, speed: () => number
     // 머리 위: 별 · 체력 · 마나
     const top = Math.max(10, feet - size * 0.92)
     if (f.stunT > 0) {
-      ctx.font = `${Math.round(R * 0.38)}px ${EMOJI}`
-      for (let i = 0; i < 3; i++) { const ang = clock * 5 + (i * TAU) / 3; ctx.fillText('⭐', X + Math.cos(ang) * R * 0.6, top - R * 0.15 + Math.sin(ang) * R * 0.18) }
+      ctx.font = `bold ${Math.max(12, Math.round(R * 0.3 / 12) * 12)}px ${PIX}`
+      ctx.fillStyle = '#dad45e'
+      for (let i = 0; i < 3; i++) { const ang = clock * 5 + (i * TAU) / 3; ctx.fillText('★', X + Math.cos(ang) * R * 0.6, top - R * 0.15 + Math.sin(ang) * R * 0.18) }
     }
     if (f.boss) return
-    const bw = R * (f.summoned ? 1.3 : 1.8), bx = X - bw / 2, bh = Math.max(4, R * 0.12), by = top - bh - 4
+    const bw = Math.round(R * (f.summoned ? 1.3 : 1.8)), bx = Math.round(X - bw / 2), bh = Math.max(4, Math.round(R * 0.12)), by = Math.round(top - bh - 4)
     if (f.summoned && f.hp >= f.maxHp) return
     const tot = Math.max(f.maxHp, f.hp + f.shield)
-    ctx.fillStyle = '#000b'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2)
-    ctx.fillStyle = '#ffffffcc'; ctx.fillRect(bx, by, (bw * a.hpLag * f.maxHp) / tot, bh)
-    ctx.fillStyle = f.side ? '#ff5d6c' : f.summoned ? '#7fffd4' : '#4ade80'
-    ctx.fillRect(bx, by, (bw * f.hp) / tot, bh)
-    if (f.shield > 0) { ctx.fillStyle = '#cfe3ff'; ctx.fillRect(bx + (bw * f.hp) / tot, by, (bw * f.shield) / tot, bh) }
+    const px = (v: number) => Math.round(v)
+    ctx.fillStyle = '#140c1c'; ctx.fillRect(bx - 2, by - 2, bw + 4, bh + 4)
+    ctx.fillStyle = '#442434'; ctx.fillRect(bx, by, bw, bh)
+    ctx.fillStyle = '#deeed6'; ctx.fillRect(bx, by, px((bw * a.hpLag * f.maxHp) / tot), bh)
+    ctx.fillStyle = f.side ? '#d04648' : f.summoned ? '#6dc2ca' : '#6daa2c'
+    ctx.fillRect(bx, by, px((bw * f.hp) / tot), bh)
+    ctx.fillStyle = '#ffffff33'; ctx.fillRect(bx, by, px((bw * f.hp) / tot), 1)
+    if (f.shield > 0) { ctx.fillStyle = '#8595a1'; ctx.fillRect(bx + px((bw * f.hp) / tot), by, px((bw * f.shield) / tot), bh) }
     if (f.maxMana > 0) {
-      ctx.fillStyle = '#000b'; ctx.fillRect(bx - 1, by + bh + 1, bw + 2, 4)
-      ctx.fillStyle = f.mana >= f.maxMana * 0.95 ? '#bfe1ff' : '#5aa9ff'
-      ctx.fillRect(bx, by + bh + 2, bw * Math.min(1, f.mana / f.maxMana), 2)
+      ctx.fillStyle = '#140c1c'; ctx.fillRect(bx - 2, by + bh + 2, bw + 4, 5)
+      ctx.fillStyle = f.mana >= f.maxMana * 0.95 ? '#6dc2ca' : '#597dce'
+      ctx.fillRect(bx, by + bh + 3, px(bw * Math.min(1, f.mana / f.maxMana)), 2)
     }
     if (f.side === 0 && !f.summoned) {
       // 별은 체력바 왼쪽 (맨 윗줄에서도 잘리지 않게)
-      ctx.font = `bold ${Math.round(Math.max(10, R * 0.3))}px sans-serif`
-      ctx.fillStyle = ['#d49a6a', '#dfe7f2', '#ffcc4d'][f.star - 1]
-      ctx.strokeStyle = '#000a'; ctx.lineWidth = 3
+      ctx.font = `bold 12px ${PIX}`
+      ctx.fillStyle = ['#d27d2c', '#deeed6', '#dad45e'][f.star - 1]
+      ctx.strokeStyle = '#140c1c'; ctx.lineWidth = 3; ctx.lineJoin = 'miter'
       ctx.textAlign = 'right'
       const st = '★'.repeat(f.star)
       ctx.strokeText(st, bx - 3, by + bh / 2); ctx.fillText(st, bx - 3, by + bh / 2)
@@ -693,7 +704,7 @@ export function playBattle(cv: HTMLCanvasElement, b: Battle, speed: () => number
       }
       case 'text': {
         const a = p < 0.75 ? 1 : (1 - p) / 0.25
-        txt(e.text, e.x * s, Math.max(14, e.y * s - p * 16), `800 ${Math.round(Math.max(12, s * 0.15))}px sans-serif`, e.color, a, 3)
+        txt(e.text, e.x * s, Math.max(14, e.y * s - p * 16), `bold ${s >= 90 ? 24 : 12}px ${PIX}`, e.color, a, 4, '#140c1c')
         break
       }
     }
@@ -707,14 +718,15 @@ export function playBattle(cv: HTMLCanvasElement, b: Battle, speed: () => number
     const mag = 1 + Math.min(1, Math.max(0, Math.log10(n.v / 1000)) * 0.4)
     const size = Math.round(base * mag * pop * Math.max(0.8, s / 110))
     const jitter = n.crit && n.v >= 10000 ? (Math.random() - 0.5) * 3 : 0
-    txt(fmt(n.v) + (n.crit ? '!' : '') , n.x * s + n.j * s + jitter, Math.max(16, n.y * s - s * 0.42 - p * s * 0.35), `900 ${size}px sans-serif`, n.heal ? '#7dffa0' : n.color, 1 - p * p, n.crit ? 4.5 : 3.5, n.crit ? '#7a3300' : '#000')
+    txt(fmt(n.v) + (n.crit ? '!' : '') , n.x * s + n.j * s + jitter, Math.max(16, n.y * s - s * 0.42 - p * s * 0.35), `bold ${size}px ${PIX}`, n.heal ? '#6daa2c' : n.color, 1 - p * p, n.crit ? 5 : 4, n.crit ? '#442434' : '#140c1c')
   }
 
   const txt = (t: string, x: number, y: number, font: string, color: string, alpha: number, stroke = 3.5, strokeColor = '#000') => {
     ctx.globalAlpha = Math.max(0, Math.min(1, alpha))
     ctx.font = font
     ctx.lineWidth = stroke
-    ctx.lineJoin = 'round'
+    ctx.lineJoin = 'miter'
+    ctx.miterLimit = 2
     ctx.strokeStyle = strokeColor
     ctx.strokeText(t, x, y)
     ctx.fillStyle = color
@@ -744,10 +756,7 @@ export function playBattle(cv: HTMLCanvasElement, b: Battle, speed: () => number
     const a = p < 0.1 ? p / 0.1 : p > 0.75 ? (1 - p) / 0.25 : 1
     const punch = 1 + Math.max(0, 1 - p * 7) * 0.5
     const size = Math.round(Math.min(v.big ? 52 : 38, cw / (v.big ? 15 : 20)) * punch)
-    ctx.save()
-    ctx.shadowBlur = 30; ctx.shadowColor = v.color
-    txt(v.text, cw / 2, ch * 0.2 + i * size * 1.1, `900 ${size}px sans-serif`, v.color, a, 6)
-    ctx.restore()
+    txt(v.text, cw / 2, ch * 0.2 + i * size * 1.1, `bold ${size}px ${PIX}`, v.color, a, 6, '#140c1c')
   }
 
   // 공명 컷인: 두 증강체 아이콘이 가운데서 부딪쳐 공명 이름이 터진다
@@ -770,16 +779,15 @@ export function playBattle(cv: HTMLCanvasElement, b: Battle, speed: () => number
     ctx.fillRect(0, y - bandH / 2, cw, bandH)
     ctx.globalCompositeOperation = 'source-over'
     const meet = clamp01(t / 0.35)
-    const iconSize = Math.round(bandH * 0.32)
-    ctx.font = `${iconSize}px ${EMOJI}`
+    const iconSize = Math.max(32, Math.round((bandH * 0.4) / 16) * 16)
+    const [ia, ib, ir] = c.res.ids
     if (meet < 1) {
-      ctx.fillText(c.res.a, cw * (0.2 + 0.28 * meet), y - bandH * 0.05)
-      ctx.fillText(c.res.b, cw * (0.8 - 0.28 * meet), y - bandH * 0.05)
+      drawIcon(ctx, ia, cw * (0.2 + 0.28 * meet), y - bandH * 0.12, iconSize)
+      drawIcon(ctx, ib, cw * (0.8 - 0.28 * meet), y - bandH * 0.12, iconSize)
     } else {
       const k2 = clamp01((t - 0.35) / 0.25)
-      ctx.font = `${Math.round(iconSize * (1 + (1 - k2) * 0.6))}px ${EMOJI}`
-      ctx.fillText(c.res.emoji, cw / 2, y - bandH * 0.08)
-      txt(`공명 · ${c.res.name}`, cw / 2, y + bandH * 0.3, `900 ${Math.round(bandH * 0.16)}px sans-serif`, '#fff3b0', k2, 6, '#5a3a00')
+      drawIcon(ctx, ir, cw / 2, y - bandH * 0.12, Math.round(iconSize * (1 + (1 - k2) * 0.6)))
+      txt(`공명 · ${c.res.name}`, cw / 2, y + bandH * 0.3, `bold ${Math.max(24, Math.round(bandH * 0.16 / 12) * 12)}px ${PIX}`, '#dad45e', k2, 6, '#442434')
     }
     ctx.restore()
   }

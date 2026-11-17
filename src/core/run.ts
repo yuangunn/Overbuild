@@ -162,7 +162,7 @@ function mergeAll(s: RunState) {
         for (const it of r.items) (keep.items.length < 3 ? keep.items : s.items).push(it)
         s.units.splice(s.units.indexOf(r), 1)
       }
-      s.notes.push(`⭐ ${UNIT[keep.tpl].name} ★${keep.star} 승급!`)
+      s.notes.push(`★ ${UNIT[keep.tpl].name} ★${keep.star} 승급!`)
       again = true
       break
     }

@@ -240,7 +240,7 @@ export class Battle {
   // 스킬 발동 (메아리·반지의 재발동도 이 경로)
   recast(f: Fighter, info: CastInfo) {
     if (!f.alive || !f.tpl.skill) return
-    const tag = info.echo ? '🔁 ' : info.ring ? '💍 ' : ''
+    const tag = info.echo ? '↻ ' : info.ring ? '↺ ' : ''
     this.emit({ k: 'cast', uid: f.uid, copy: !!tag })
     this.emit({ k: 'text', x: f.x, y: f.y - f.size * 0.95, text: tag + f.tpl.skillName, color: tag ? '#ffd166' : '#c9b6ff' })
     f.tpl.skill(this, f)
