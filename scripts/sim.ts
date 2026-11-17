@@ -8,7 +8,7 @@ import { COMBOS, ITEMS, combine } from '../src/core/data/items.ts'
 import { EVOS } from '../src/core/data/evolutions.ts'
 import { EVENTS } from '../src/core/data/events.ts'
 import { ENEMIES, enemyMult, makeWave } from '../src/core/data/enemies.ts'
-import { LIMITS, cleanHero, newHero, registerHeroes } from '../src/core/heroes.ts'
+import { LIMITS, cleanHero, heroCode, newHero, parseHeroCode, registerHeroes } from '../src/core/heroes.ts'
 import { TRAITS } from '../src/core/data/traits.ts'
 import * as M from '../src/core/meta.ts'
 import { UNLOCKS } from '../src/core/meta.ts'
@@ -196,6 +196,15 @@ console.log('\n[1c] 샌드박스·나만의 영웅')
     `영웅 전투: 빌린 스킬 발동·분열 분신 ${clones}기, 샌드박스 상태(라운드·생명)는 그대로 · ${sum.win ? '승' : '패'} ${sum.time.toFixed(1)}초`)
   registerHeroes([])
   ok(!UNIT.h_test, '지운 영웅은 UNIT에서 빠짐')
+  const src = { ...cleanHero({ ...newHero(), id: 'h_src', name: '불꽃 기사단장', traits: ['guard', 'arcane'], hp: 4200, skill: 'lich', passive: 'thorns', spr: ['Undead', 6, 2] })! }
+  const code = heroCode(src)
+  const back = parseHeroCode(code)!
+  ok(!!back && back.id !== src.id && back.id.startsWith('h_') && JSON.stringify({ ...back, id: '' }) === JSON.stringify({ ...src, id: '' }), `공유 코드 왕복 (${code.length}자): 한글 이름·능력치·스킬·패시브 그대로, id는 새로`)
+  const evil = 'OBH1.' + btoa(unescape(encodeURIComponent(JSON.stringify(['<img src=x onerror=alert(1)>', ['Nope', 99, -3], ['beast', 'beast', 'x', 'guard'], 1e9, -1, 'a', 2, 3, 4, 5, 6, 'nope', 'evil']))))
+  const e2 = parseHeroCode(evil)!
+  ok(!!e2 && !/[<>]/.test(e2.name) && e2.hp === LIMITS.hp[1] && e2.atk === LIMITS.atk[0] && e2.spr[1] === 7 && e2.spr[2] === 0 && e2.skill === '' && e2.passive === 'none' && e2.traits.length <= 2,
+    '조작한 코드도 이름 꺾쇠 제거·능력치 범위·외형 칸·없는 스킬 정리')
+  ok(parseHeroCode('hello') === null && parseHeroCode('OBH1.!!!') === null && parseHeroCode('OBH1.' + 'A'.repeat(3000)) === null && parseHeroCode('OBH1.' + btoa('{}')) === null, '형식이 틀리거나 너무 긴 코드는 거절')
 }
 
 // ───────────────────────── 1d. 지휘 레벨·무한 원정

@@ -92,7 +92,8 @@ export function cleanHero(h: Partial<HeroDef>): HeroDef | null {
     const v = Number(h[k])
     return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d[k]
   }
-  const spr = Array.isArray(h.spr) && typeof h.spr[0] === 'string' ? [h.spr[0], h.spr[1] | 0, h.spr[2] | 0] as HeroDef['spr'] : d.spr
+  const cell = (v: unknown, hi: number) => Math.min(hi, Math.max(0, Number(v) | 0))
+  const spr = Array.isArray(h.spr) && typeof h.spr[0] === 'string' ? [h.spr[0].slice(0, 16), cell(h.spr[1], 7), cell(h.spr[2], 40)] as HeroDef['spr'] : d.spr
   return {
     id: h.id, name: String(h.name ?? '').replace(/[<>&"'`]/g, '').slice(0, 12) || d.name, spr, // 이름은 화면 HTML에 그대로 들어간다
     traits: (Array.isArray(h.traits) ? h.traits : []).filter((t): t is TraitId => TRAIT_IDS.includes(t as TraitId)).slice(0, 2),
@@ -100,6 +101,27 @@ export function cleanHero(h: Partial<HeroDef>): HeroDef | null {
     skill: SKILL_SRC.some(t => t.id === h.skill) ? h.skill! : '',
     passive: h.passive && PASSIVES[h.passive] ? h.passive : 'none',
   }
+}
+
+// ── 공유 코드 (TABS 창작마당처럼 주고받기): 'OBH1.' + base64url(JSON 배열). id는 받는 쪽에서 새로 만든다.
+const CODE = 'OBH1.'
+const FIELDS = ['name', 'spr', 'traits', 'hp', 'atk', 'as', 'range', 'armor', 'crit', 'mana', 'size', 'skill', 'passive'] as const
+
+export function heroCode(h: HeroDef): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(FIELDS.map(k => h[k])))
+  return CODE + btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+// 남이 준 글자라 길이·형식을 보고, 값은 cleanHero가 다시 맞춘다
+export function parseHeroCode(code: string): HeroDef | null {
+  const c = code.trim()
+  if (!c.startsWith(CODE) || c.length > 1500) return null
+  try {
+    const bin = atob(c.slice(CODE.length).replace(/-/g, '+').replace(/_/g, '/'))
+    const a: unknown = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, ch => ch.charCodeAt(0))))
+    if (!Array.isArray(a) || a.length !== FIELDS.length) return null
+    return cleanHero({ ...Object.fromEntries(FIELDS.map((k, i) => [k, a[i]])), id: newHero().id })
+  } catch { return null }
 }
 
 export function heroTpl(h: HeroDef): UnitTpl {

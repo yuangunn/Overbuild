@@ -10,7 +10,7 @@ import { CMD } from '../core/data/commanders.ts'
 import { HEAT, HEAT_RULE, heatOf, shardMult } from '../core/data/heat.ts'
 import { EVOS } from '../core/data/evolutions.ts'
 import { EVENT } from '../core/data/events.ts'
-import { LIMITS, PASSIVES, SKILL_SRC, cleanHero, newHero, powerGrade, registerHeroes, skillDesc, type HeroDef, type Stat } from '../core/heroes.ts'
+import { LIMITS, PASSIVES, SKILL_SRC, cleanHero, heroCode, newHero, parseHeroCode, powerGrade, registerHeroes, skillDesc, type HeroDef, type Stat } from '../core/heroes.ts'
 import * as R from '../core/run.ts'
 import * as M from '../core/meta.ts'
 import { playBattle, fmt, drawFloor, type Player } from './arena.ts'
@@ -730,6 +730,18 @@ function act(name: string, el?: HTMLElement) {
       break
     case 'hTrait': { const h = curHero(), t = d.id as TraitId; if (h) { h.traits = h.traits.includes(t) ? h.traits.filter(x => x !== t) : [...h.traits, t].slice(-2); saveHeroes() } } break
     case 'hSheet': if (isSheet(d.id!)) sheet = d.id; break
+    case 'hImport': {
+      const h = parseHeroCode(($app.querySelector('#hero-in') as HTMLInputElement | null)?.value ?? '')
+      if (!h) { toast('공유 코드가 아닙니다 (OBH1. 으로 시작하는 글자)'); return }
+      heroes.push(h); editing = h.id; saveHeroes(); openSheet(); toast(`${h.name}을(를) 불러왔습니다`)
+    } break
+    case 'hCopy': {
+      const el = $app.querySelector<HTMLInputElement>('#hero-code')
+      if (!el) return
+      el.select()
+      navigator.clipboard?.writeText(el.value).then(() => toast('공유 코드를 복사했습니다'), () => toast('복사하지 못했습니다 — 글자를 직접 선택해 복사하세요'))
+      return
+    }
     case 'hSpr': { const h = curHero(); if (h) { h.spr = [sheet, +d.c!, +d.r!]; saveHeroes() } } break
     case 'hUse': { const h = curHero(); enterSandbox(); if (h) { brush = { k: 'unit', id: h.id }; palTab = 'hero' } } break
     // 샌드박스
@@ -1014,6 +1026,7 @@ function heroesScreen() {
     <div class="hero-wrap">
       <aside class="panel hero-list">
         <button class="primary" data-act="hNew">+ 새 영웅</button>
+        <div class="import"><input type="text" id="hero-in" placeholder="공유 코드 붙여넣기 (OBH1.…)" spellcheck="false"><button data-act="hImport">불러오기</button></div>
         ${heroes.map(x => `<div class="hero-item ${x.id === editing ? 'on' : ''}" data-act="hEdit" data-id="${x.id}">${sprHTML(x.id, '⭐', 'tipspr', 0)}<b>${x.name}</b><span class="dim">${powerGrade(UNIT[x.id]).grade}</span></div>`).join('') || '<p class="dim small">아직 없습니다.</p>'}
       </aside>
       ${h ? heroEditor(h) : `<section class="panel hero-empty"><h3>영웅을 만들어 보세요</h3>
@@ -1040,6 +1053,7 @@ function heroEditor(h: HeroDef) {
       <button data-act="hDup">복제</button>
       <button class="${delArm === h.id ? 'danger' : ''}" data-act="hDel">${delArm === h.id ? '한 번 더 누르면 삭제' : '삭제'}</button>
     </div>
+    <div class="share"><span class="dim">공유 코드</span><input type="text" id="hero-code" readonly value="${heroCode(h)}"><button data-act="hCopy">복사</button></div>
   </section>
   <section class="panel hero-spr">
     <h3>외형 <span class="dim">DawnLike</span></h3>
@@ -1071,6 +1085,8 @@ $app.addEventListener('input', e => {
   Object.assign(h, next)
   saveHeroes()
   $app.querySelector('#hero-prev')!.innerHTML = heroPrev(h)
+  const code = $app.querySelector<HTMLInputElement>('#hero-code')
+  if (code) code.value = heroCode(h)
   const st = STATS.find(x => x[0] === k)
   if (st) $app.querySelector('#hv-' + k)!.textContent = st[2](h[st[0]])
   const item = $app.querySelector('.hero-item.on')
