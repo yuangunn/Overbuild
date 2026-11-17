@@ -2,6 +2,7 @@
 import * as R from '../src/core/run.ts'
 import { UNIT } from '../src/core/data/units.ts'
 import { AUG, RESONANCES } from '../src/core/data/augments.ts'
+import { EVOS } from '../src/core/data/evolutions.ts'
 
 export const val = (u: R.OwnedUnit) => UNIT[u.tpl].cost * 3 ** (u.star - 1)
 
@@ -32,7 +33,12 @@ export function botTurn(s: R.RunState, smart: boolean) {
     const weak = R.boardOf(s).sort((a, b) => val(a) - val(b))[0]
     if (weak && val(weak) < val(u)) R.move(s, u.id, weak.pos)
   }
-  // 아이템은 가장 비싼 유닛부터
+  // 진화 재료는 ★3 유닛에게 먼저, 나머지는 가장 비싼 유닛부터
+  if (smart) for (const u of R.boardOf(s)) {
+    const e = EVOS[u.tpl]
+    const i = e && u.star === 3 && !R.evoOf(u) ? s.items.indexOf(e.item) : -1
+    if (i >= 0 && u.items.length < 3) R.equip(s, i, u.id)
+  }
   while (s.items.length) {
     const t = R.boardOf(s).filter(u => u.items.length < 3).sort((a, b) => val(b) - val(a))[0]
     if (!t) break

@@ -357,3 +357,8 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 18px; border: 0; bord
 .combos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px }
 .combo { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border: 8px solid transparent; border-image: url(./assets/ui/p2-grey.png) 8 fill / 8px }
 .combo > i { font-style: normal; color: var(--dim) } .combo > div { display: flex; flex-direction: column; margin-left: 8px; min-width: 0 }
+
+/* ── ★3 진화 */
+.tok.evo .base { --rc: var(--cyan); animation: blink 1s steps(2) infinite }
+.tok.evo .st { color: var(--cyan) }
+.skill.evo { color: var(--cyan) }

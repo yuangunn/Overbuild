@@ -8,6 +8,7 @@ import { AUG, AUGMENTS, RESONANCES } from '../core/data/augments.ts'
 import { ITEM, ITEMS, COMBOS, combine } from '../core/data/items.ts'
 import { CMD } from '../core/data/commanders.ts'
 import { HEAT, HEAT_RULE, heatOf, shardMult } from '../core/data/heat.ts'
+import { EVOS } from '../core/data/evolutions.ts'
 import { LIMITS, PASSIVES, SKILL_SRC, cleanHero, newHero, powerGrade, registerHeroes, skillDesc, type HeroDef, type Stat } from '../core/heroes.ts'
 import * as R from '../core/run.ts'
 import * as M from '../core/meta.ts'
@@ -155,6 +156,9 @@ function codexScreen() {
         <p>${f ? r.desc : '아직 발견하지 못했습니다.'}</p>
       </div>`
     }).join('')}</div>
+    <h2 class="sub">★3 진화표</h2>
+    <p class="dim">★3 유닛이 짝 아이템을 들면 스킬이 바뀝니다. 그 아이템이 재료로 들어간 조합 아이템이어도 됩니다.</p>
+    <div class="combos">${Object.entries(EVOS).filter(([id]) => !UNIT[id].locked || meta.unlocked.includes('u_' + id)).map(([id, e]) => `<div class="combo">${sprHTML(id, '', 'tipspr', 0)}<i>★3 +</i>${ic(e.item, 32)}<i>→</i><div><b class="gold">${e.name}</b><span class="dim small">${UNIT[id].name} · ${e.desc}</span></div></div>`).join('')}</div>
     <h2 class="sub">아이템 조합표</h2>
     <p class="dim">한 유닛에 재료 두 개를 끼우면 자동으로 합쳐져 한 칸만 씁니다. 재료 효과를 모두 갖고 고유 효과가 붙습니다.</p>
     <div class="combos">${COMBOS.map(c => `<div class="combo" data-tip="i:${c.id}">${ic(c.from![0], 32)}<i>+</i>${ic(c.from![1], 32)}<i>→</i>${ic(c.id, 32)}<div><b>${c.name}</b><span class="dim small">${c.desc}</span></div></div>`).join('')}</div>
@@ -269,7 +273,7 @@ function arenaCells(s: R.RunState) {
 
 function token(u: R.OwnedUnit) {
   const t = UNIT[u.tpl]
-  return `<div class="tok c${t.cost} s${u.star} ${sel.unit === u.id ? 'sel' : ''}" data-unit="${u.id}" data-tpl="${u.tpl}" data-tip="u:${u.id}">
+  return `<div class="tok c${t.cost} s${u.star} ${sel.unit === u.id ? 'sel' : ''} ${R.evoOf(u) ? 'evo' : ''}" data-unit="${u.id}" data-tpl="${u.tpl}" data-tip="u:${u.id}">
     <i class="base"></i>${sprHTML(t.id, t.emoji, '', 0)}<span class="st">${stars(u.star)}</span>
     ${u.items.length ? `<span class="its">${u.items.map(i => ic(i, 16, ITEM[i].emoji)).join('')}</span>` : ''}</div>`
 }
@@ -413,12 +417,16 @@ function endModal(s: R.RunState) {
 }
 
 // ───────────────────────── 툴팁
-function unitTip(t: UnitTpl, star: number, extra = '') {
+// evolved: 이 유닛이 지금 진화했는지 (아니면 진화 조건을 한 줄로 보여 준다)
+function unitTip(t: UnitTpl, star: number, extra = '', evolved = false) {
   const m = STAR_MULT[star - 1]
+  const e = EVOS[t.id]
+  const skill = evolved && e ? `<div><b class="skill evo">${e.name}</b> <span class="gold">진화</span> <span class="dim">마나 ${t.mana}</span><br>${e.desc}</div>`
+    : `<div><b class="skill">${t.skillName}</b> <span class="dim">마나 ${t.mana}</span><br>${t.skillDesc}</div>${e ? `<div class="dim tip-h">진화: ★3 + ${ic(e.item)}${ITEM[e.item].name} → <span class="gold">${e.name}</span></div>` : ''}`
   return `<div class="tip-h">${sprHTML(t.id, t.emoji, 'tipspr', 0)} <b>${t.name}</b> <span class="gold">${stars(star)}</span> <span class="dim">${t.custom ? '나만의 영웅' : t.cost + '골드'}</span></div>
     <div>${traitChips(t)}</div>
     <div class="stats">체력 ${fmt(t.hp * m)} · 공격 ${fmt(t.atk * m)} · 공속 ${t.as}/초 · 사거리 ${t.range}</div>
-    <div><b class="skill">${t.skillName}</b> <span class="dim">마나 ${t.mana}</span><br>${t.skillDesc}</div>${extra}`
+    ${skill}${extra}`
 }
 
 function tipHTML(key: string): string {
@@ -427,7 +435,7 @@ function tipHTML(key: string): string {
     const u = run.units.find(o => o.id === +v)
     if (!u) return ''
     const its = u.items.map(i => `<div class="tip-h">${ic(i)}${ITEM[i].name} <span class="dim">${ITEM[i].desc}</span></div>`).join('')
-    return unitTip(UNIT[u.tpl], u.star, `${u.bonus ? `<div class="good">성장 +${Math.round(u.bonus * 100)}%</div>` : ''}${its}<div class="dim small">${run.sandbox ? '끌어서 옮기기 · 아래 칸으로 끌면 빠짐' : `판매 ${R.sellValue(u)}골드 · 클릭해서 선택`}</div>`)
+    return unitTip(UNIT[u.tpl], u.star, `${u.bonus ? `<div class="good">성장 +${Math.round(u.bonus * 100)}%</div>` : ''}${its}<div class="dim small">${run.sandbox ? '끌어서 옮기기 · 아래 칸으로 끌면 빠짐' : `판매 ${R.sellValue(u)}골드 · 클릭해서 선택`}</div>`, !!R.evoOf(u))
   }
   if (k === 't') return unitTip(UNIT[v], 1, `<div class="dim small">${run && !R.canAdd(run, v) ? '<span class="bad">자리가 없습니다 — 대기석 유닛을 상점으로 끌어 판매</span>' : '클릭해서 구매'}</div>`)
   if (k === 'n') {

@@ -9,6 +9,7 @@ import { mkRng, pick, pickW, rand, shuffle, type Rng } from './rng.ts'
 import { CMD, COMMANDERS } from './data/commanders.ts'
 import { AFFIXES } from './data/enemies.ts'
 import { HEAT_RULE } from './data/heat.ts'
+import { EVOS, type EvoDef } from './data/evolutions.ts'
 
 export const MAX_ROUND = 15
 export const AUG_ROUNDS = [1, 4, 7, 10, 13]
@@ -109,6 +110,13 @@ export const benchOf = (s: RunState) => s.units.filter(u => u.pos === null)
 export const slotsOf = (s: RunState) => Math.min(12, levelOf(s.xp).lv + 2 + s.bonusSlots)
 // 유닛·적·나만의 영웅을 한 이름으로 찾는다 (영웅은 heroes.ts가 UNIT에 등록)
 export const tplOf = (id: string): UnitTpl | undefined => UNIT[id] ?? ENEMIES[id]
+// ★3 진화: ★3 + 짝 아이템 (그 아이템이 재료인 조합 아이템도 된다)
+export const hasItem = (items: string[], id: string) => items.some(i => i === id || ITEM[i]?.from?.includes(id))
+export const evoOf = (u: Pick<OwnedUnit, 'tpl' | 'star' | 'items'>): EvoDef | undefined => {
+  const e = EVOS[u.tpl]
+  return e && u.star >= 3 && hasItem(u.items, e.item) ? e : undefined
+}
+const evoNote = (s: RunState, u: OwnedUnit, was: boolean) => { const e = evoOf(u); if (e && !was) s.notes.push(`진화! ${UNIT[u.tpl].name} — ${e.name}`) }
 export const sellValue = (u: OwnedUnit) => UNIT[u.tpl].cost * 3 ** (u.star - 1)
 export const shopPool = (s: RunState) => UNITS.filter(t => !t.locked || s.unlocked.includes('u_' + t.id))
 export const activeRes = (s: RunState): ResDef[] => RESONANCES.filter(r => r.pair.every(p => has(s, p)))
@@ -254,6 +262,7 @@ function mergeAll(s: RunState) {
       if (same.length < 3) continue
       same.sort((a, b) => (b.pos !== null ? 1 : 0) - (a.pos !== null ? 1 : 0))
       const [keep, ...rest] = same.slice(0, 3)
+      const was = !!evoOf(keep)
       keep.star++
       keep.bonus = Math.max(keep.bonus, ...rest.map(r => r.bonus))
       for (const r of rest) {
@@ -265,6 +274,7 @@ function mergeAll(s: RunState) {
         s.units.splice(s.units.indexOf(r), 1)
       }
       s.notes.push(`★ ${UNIT[keep.tpl].name} ★${keep.star} 승급!`)
+      evoNote(s, keep, was)
       again = true
       break
     }
@@ -303,9 +313,11 @@ export function equip(s: RunState, idx: number, unitId: number): string | null {
   const next = combine([...u.items, s.items[idx]])
   if (next.length > 3) return '아이템은 유닛당 3개까지'
   const made = next.find(i => !u.items.includes(i) && ITEM[i].from)
+  const was = !!evoOf(u)
   s.items.splice(idx, 1)
   u.items = next
   if (made) s.notes.push(`조합! ${ITEM[made].name}`)
+  evoNote(s, u, was)
   return null
 }
 
@@ -346,7 +358,9 @@ export function buildBattle(s: RunState): Battle {
   const b = new Battle([mods, []], Math.floor(rand(s.rng) * 2 ** 31), slots)
   for (const u of boardOf(s)) {
     const { x, y } = cellXY(u.pos!, 0)
-    const f = b.add(tplOf(u.tpl)!, u.star, 0, x, y, 1 + u.bonus)
+    const base = tplOf(u.tpl)!, e = evoOf(u)
+    const t = e ? { ...base, skillName: e.name, skillDesc: e.desc, skill: e.skill, own: e.own ? () => [...(base.own?.() ?? []), ...e.own!()] : base.own } : base
+    const f = b.add(t, u.star, 0, x, y, 1 + u.bonus)
     f.owner = u.id
     for (const it of u.items) ITEM[it].apply(f)
   }

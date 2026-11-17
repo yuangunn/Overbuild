@@ -5,6 +5,7 @@ import * as R from '../src/core/run.ts'
 import { UNIT, UNITS } from '../src/core/data/units.ts'
 import { AUG, AUGMENTS, RESONANCES } from '../src/core/data/augments.ts'
 import { COMBOS, ITEMS, combine } from '../src/core/data/items.ts'
+import { EVOS } from '../src/core/data/evolutions.ts'
 import { ENEMIES, enemyMult, makeWave } from '../src/core/data/enemies.ts'
 import { LIMITS, cleanHero, newHero, registerHeroes } from '../src/core/heroes.ts'
 import { TRAITS } from '../src/core/data/traits.ts'
@@ -318,6 +319,30 @@ console.log('\n[1g] 아이템 조합')
   ok(c1 === orig * 3 && orig >= c0, `무한의 고리: 원본 ${orig}회 → 총 ${c1}회 (3배)`)
   const bas = run(vs(setup(8, [['bear', 1, ['bastion']]]), 'brute', 4), 20)
   ok(of(bas, 'bear').st.bastion === 1, '불굴의 성채: 보호막이 깨지면 한 번 다시')
+}
+
+// ───────────────────────── 1h. ★3 진화
+console.log('\n[1h] ★3 진화')
+{
+  const fired: string[] = [], better: string[] = []
+  for (const [id, e] of Object.entries(EVOS)) {
+    const evo = run(vs(setup(10, [[id, 3, [e.item]]]), 'brute', 6, 4), 20)
+    const plain = run(vs(setup(10, [[id, 3]]), 'brute', 6, 4), 20)
+    const f = of(evo, id)
+    if (f.tpl.skillName === e.name && (f.st.casts ?? 0) > 0) fired.push(id)
+    if (evo.fighters.filter(x => x.side === 1 && !x.alive).length >= plain.fighters.filter(x => x.side === 1 && !x.alive).length) better.push(id)
+  }
+  ok(fired.length === Object.keys(EVOS).length, `16종 모두 진화 스킬 발동 (${fired.length}/${Object.keys(EVOS).length})`)
+  ok(better.length >= 14, `진화하면 대개 더 많이 쓰러뜨림 (${better.length}/16)`)
+  const s = R.newRun({ unlocked: [] }, 4)
+  s.units = [
+    { id: 1, tpl: 'golem', star: 2, items: ['bastion'], pos: 0, bonus: 0 },
+    { id: 2, tpl: 'golem', star: 2, items: [], pos: null, bonus: 0 },
+    { id: 3, tpl: 'golem', star: 1, items: [], pos: null, bonus: 0 }, { id: 4, tpl: 'golem', star: 1, items: [], pos: null, bonus: 0 },
+  ]
+  R.addUnit(s, 'golem', 1)
+  ok(s.units.length === 1 && s.units[0].star === 3 && !!R.evoOf(s.units[0]) && s.notes.some(n => n.includes('대지 분쇄')), '★3 승급 순간 조합 아이템(성채 ← 투구)으로 진화, 알림')
+  ok(!R.evoOf({ tpl: 'golem', star: 2, items: ['helm'] }) && !R.evoOf({ tpl: 'golem', star: 3, items: ['sword'] }), '★2이거나 짝 아이템이 아니면 진화 없음')
 }
 
 // ───────────────────────── 2. 사기 빌드 (15라운드 보스)
