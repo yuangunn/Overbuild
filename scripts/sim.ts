@@ -6,6 +6,7 @@ import { UNIT, UNITS } from '../src/core/data/units.ts'
 import { AUG, AUGMENTS, RESONANCES } from '../src/core/data/augments.ts'
 import { COMBOS, ITEMS, combine } from '../src/core/data/items.ts'
 import { EVOS } from '../src/core/data/evolutions.ts'
+import { EVENTS } from '../src/core/data/events.ts'
 import { ENEMIES, enemyMult, makeWave } from '../src/core/data/enemies.ts'
 import { LIMITS, cleanHero, newHero, registerHeroes } from '../src/core/heroes.ts'
 import { TRAITS } from '../src/core/data/traits.ts'
@@ -345,6 +346,68 @@ console.log('\n[1h] ★3 진화')
   ok(!R.evoOf({ tpl: 'golem', star: 2, items: ['helm'] }) && !R.evoOf({ tpl: 'golem', star: 3, items: ['sword'] }), '★2이거나 짝 아이템이 아니면 진화 없음')
 }
 
+// ───────────────────────── 1i. 갈림길·방·사건
+console.log('\n[1i] 갈림길·방·사건')
+{
+  // 라운드를 끝낸 상태를 만든다: 이긴 전투 뒤 보상 하나를 고르면 갈림길
+  // 강한 유닛으로 그 라운드 전투를 실제로 이기고, 증강체·전리품은 첫 번째로 고른다
+  const end = (s: R.RunState, round: number) => {
+    s.round = round; s.room = undefined; s.queue = []
+    s.wave = makeWave(round, s.rng, s.elites)
+    const keep = s.units
+    s.units = [{ id: 900, tpl: 'bear', star: 3, items: ['sword', 'helm', 'charm'], pos: 9, bonus: 5 }]
+    R.endBattle(s, R.buildBattle(s))
+    s.units = keep
+    while (R.isAugQ(s.queue[0]) || s.queue[0] === 'reward') s.queue[0] === 'reward' ? R.pickReward(s, 0) : R.pickAug(s, s.augChoices[0])
+  }
+  const s = R.newRun({ unlocked: [] }, 77)
+  s.queue = []
+  end(s, 1)
+  ok(s.queue[0] === 'path' && s.paths!.length === 3 && s.paths!.some(d => ['fight', 'elite', 'treasure'].includes(d.kind)), `1R 뒤 갈림길 3개: ${s.paths!.map(d => d.kind).join(', ')}`)
+  const t = R.newRun({ unlocked: [] }, 77); t.queue = []
+  end(t, 4)
+  ok(t.round === 5 && !t.queue.length && t.wave.kind === 'elite', '정예 라운드 앞에는 갈림길 없음')
+  // 상인
+  s.paths = [{ kind: 'shop' }]; R.pickPath(s, 0)
+  ok(s.round === 2 && s.queue[0] === 'room' && !s.wave.spawns.length && (s.offers?.length ?? 0) >= 3, '상인 방: 전투 없음, 진열 3~4개')
+  s.gold = 30
+  const n0 = s.items.length
+  R.buyOffer(s, 0); R.buyOffer(s, 0)
+  ok(s.items.length === n0 + 1 && s.gold === 26 && s.offers![0].sold === true, '상인: 아이템 4골드, 한 번만')
+  R.leaveShop(s); R.leaveRoom(s)
+  ok(s.queue[0] === 'path' && s.round === 2, '상인 방에서 다음으로 → 갈림길')
+  // 휴식처
+  s.paths = [{ kind: 'rest' }]; R.pickPath(s, 0)
+  s.lives = 1
+  R.rest(s, 'life')
+  ok(s.round === 3 && s.lives === 2 && !s.queue.length, '휴식처: 생명 +1')
+  // 정예 조우 + 증강체 라운드(4R)
+  R.leaveRoom(s)
+  s.paths = [{ kind: 'elite' }]; R.pickPath(s, 0)
+  const plain = R.newRun({ unlocked: [] }, 1)
+  ok(s.round === 4 && s.wave.kind === 'elite' && s.wave.spawns.filter(sp => sp.aff).length >= 2 && Math.abs(s.wave.spawns[0].mult / enemyMult(4) - R.ELITE_ROOM) < 0.01 && !!plain, `정예 조우: 적 ×${R.ELITE_ROOM}, 접두사 둘`)
+  s.units = [{ id: 1, tpl: 'bear', star: 3, items: ['sword', 'helm', 'charm'], pos: 9, bonus: 5 }]
+  const sum = R.endBattle(s, R.buildBattle(s))
+  ok(sum.win && s.queue[0] === 'augment' && s.queue[1] === 'goldaug' && s.augChoices.length === 3, `정예 조우 승리 + 증강체 라운드: ${s.queue.join(' → ')}`)
+  R.pickAug(s, s.augChoices[0])
+  ok(s.queue[0] === 'goldaug' && s.augChoices.length > 0 && s.augChoices.every(a => AUG[a].rarity === 2), '이어서 골드 증강체만')
+  // 사건 9종의 모든 선택지
+  const errs: string[] = []
+  let tried = 0
+  for (const ev of EVENTS) ev.choices.forEach((_, i) => {
+    const e = R.newRun({ unlocked: [] }, 5)
+    e.queue = []; e.gold = 30; e.items = ['sword', 'feather']; e.augments = ['vamp', 'echo']
+    e.units = [{ id: 1, tpl: 'wolf', star: 2, items: [], pos: 0, bonus: 0 }]
+    end(e, 2)
+    e.paths = [{ kind: 'event', event: ev.id }]; R.pickPath(e, 0)
+    try { const no = R.eventPick(e, i); tried++; if (no) errs.push(`${ev.id}/${i}: ${no}`); else if (e.queue[0] === 'room') errs.push(`${ev.id}/${i}: 방이 안 닫힘`) } catch (x) { errs.push(`${ev.id}/${i}: ${x}`) }
+  })
+  ok(!errs.length, `사건 ${EVENTS.length}종 선택지 ${tried}개 모두 적용 ${errs.join(' ')}`)
+  const g = R.newRun({ unlocked: [] }, 5); g.queue = []; g.augments = ['vamp', 'echo']; end(g, 2)
+  g.paths = [{ kind: 'event', event: 'gambler' }]; R.pickPath(g, 0); R.eventPick(g, 0)
+  ok(!g.augments.includes('vamp') && g.augments.includes('echo') && g.queue[0] === 'augment' && g.augChoices.every(a => AUG[a].rarity === 3), '도박꾼: 가장 낮은 등급을 잃고 프리즘 선택')
+}
+
 // ───────────────────────── 2. 사기 빌드 (15라운드 보스)
 console.log('\n[2] 사기 빌드 — 15라운드 보스, 시드 20개')
 interface Build { name: string; team: Spec[]; augs: string[]; bonus?: number }
@@ -355,7 +418,7 @@ const BUILDS: Build[] = [
   },
   {
     name: '연쇄 치명 (그림자+연쇄+산탄)', augs: ['chain', 'overload', 'multishot', 'executioner'],
-    team: [['cutthroat', 2], ['wolf', 2], ['sniper', 2, ['dice']], ['bladedancer', 2, ['dice']], ['ranger', 2], ['golem', 2], ['stormcaller', 2], ['shieldbearer', 2, ['helm']]],
+    team: [['cutthroat', 2], ['wolf', 2], ['sniper', 2, ['execblade']], ['bladedancer', 2, ['quickdraw']], ['ranger', 2], ['golem', 2], ['stormcaller', 2], ['shieldbearer', 2, ['helm']]],
   },
   {
     name: '망자의 군단 (망령+영혼 계약+시체 폭발)', augs: ['soulpact', 'martyr', 'corpse', 'crest_undead'],

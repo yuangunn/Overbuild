@@ -50,7 +50,18 @@ export function botTurn(s: R.RunState, smart: boolean) {
 export function botPick(s: R.RunState, smart: boolean) {
   while (s.queue.length && !s.over) {
     if (s.queue[0] === 'commander') R.pickCmd(s, s.cmdChoices![0]) // 섞여 나오므로 사령관별 통계가 고르게 쌓인다
-    else if (s.queue[0] === 'augment') {
+    else if (s.queue[0] === 'path') {
+      // 공명 봇: 생명이 넉넉하면 정예 조우(증강체), 아니면 전투 → 보물 → 사건 → 휴식 → 상인
+      const pref: R.DoorKind[] = s.lives >= 2 ? ['elite', 'fight', 'treasure', 'event', 'rest', 'shop'] : ['rest', 'fight', 'treasure', 'event', 'shop', 'elite']
+      const p = s.paths!
+      R.pickPath(s, smart ? Math.max(0, p.findIndex(d => d.kind === pref.find(k => p.some(x => x.kind === k)))) : 0)
+    } else if (s.queue[0] === 'room') {
+      const k = s.room?.kind
+      if (k === 'rest') R.rest(s, s.lives < s.maxLives ? 'life' : 'train')
+      else if (k === 'event') { const n = 2; let i = 0; while (i < n - 1 && R.eventCan(s, i)) i++; if (R.eventPick(s, i)) R.eventPick(s, n - 1) }
+      else { if (smart) s.offers?.forEach((o, i) => { if (o.kind === 'aug' || s.gold >= o.price + 6) R.buyOffer(s, i) }); R.leaveShop(s) }
+    }
+    else if (R.isAugQ(s.queue[0])) {
       const c = s.augChoices
       const score = (id: string) => (RESONANCES.some(r => r.pair.includes(id) && r.pair.every(p => p === id || s.augments.includes(p))) ? 10 : 0) + AUG[id].rarity
       R.pickAug(s, smart ? [...c].sort((a, b) => score(b) - score(a))[0] : c[0])
@@ -61,17 +72,23 @@ export function botPick(s: R.RunState, smart: boolean) {
   }
 }
 
+// 한 라운드 진행: 전투 없는 방이면 전투 없이 다음으로
+export function playRound(s: R.RunState) {
+  if (!s.wave.spawns.length) { R.leaveRoom(s); return null }
+  const b = R.buildBattle(s)
+  return { b, sum: R.endBattle(s, b) }
+}
+
 export function bot(seed: number, smart: boolean, unlocked: string[] = []) {
   let s = R.newRun({ unlocked }, seed)
   const maxT: number[] = []
-  for (let g = 0; g < 40 && !s.over; g++) {
+  for (let g = 0; g < 60 && !s.over; g++) {
     botPick(s, smart)
     if (s.over) break
     botTurn(s, smart)
     s = JSON.parse(JSON.stringify(s)) // 매 라운드 저장/불러오기 왕복
-    const b = R.buildBattle(s)
-    R.endBattle(s, b)
-    maxT.push(b.t)
+    const r = playRound(s)
+    if (r) maxT.push(r.b.t)
   }
   return { s, maxT: Math.max(...maxT) }
 }

@@ -9,6 +9,7 @@ import { ITEM, ITEMS, COMBOS, combine } from '../core/data/items.ts'
 import { CMD } from '../core/data/commanders.ts'
 import { HEAT, HEAT_RULE, heatOf, shardMult } from '../core/data/heat.ts'
 import { EVOS } from '../core/data/evolutions.ts'
+import { EVENT } from '../core/data/events.ts'
 import { LIMITS, PASSIVES, SKILL_SRC, cleanHero, newHero, powerGrade, registerHeroes, skillDesc, type HeroDef, type Stat } from '../core/heroes.ts'
 import * as R from '../core/run.ts'
 import * as M from '../core/meta.ts'
@@ -189,11 +190,12 @@ function runScreen(s: R.RunState) {
         ${syn.length ? syn.map(synRow).join('') : '<p class="dim small">유닛을 배치하면 시너지가 켜집니다. 같은 특성 2명·4명.</p>'}
       </aside>
       <section class="center">
-        <div class="hud" id="hud">${battle ? '' : sb ? sandHud() : `<span class="dim">다음 적 · ${s.wave.spawns.length}명</span>${s.wave.hint ? `<span class="gimmick" title="${s.wave.hint}">${ic('elite')}<span>${s.wave.hint}</span></span>` : ''}`}</div>
+        <div class="hud" id="hud">${battle ? '' : sb ? sandHud() : !s.wave.spawns.length ? '<span class="gimmick">전투 없는 방 — 준비를 마치면 다음으로</span>' : `<span class="dim">다음 적 · ${s.wave.spawns.length}명</span>${s.wave.hint ? `<span class="gimmick" title="${s.wave.hint}">${ic('elite')}<span>${s.wave.hint}</span></span>` : ''}`}</div>
         <div class="arena z${zoneOf(s)}" id="arena">${battle ? '<canvas id="cv"></canvas>' : '<canvas class="floor"></canvas>' + arenaCells(s)}</div>
         <div class="ctrl">
           <div class="speed">${[1, 2, 4].map(v => `<button data-act="speed" data-v="${v}" class="${meta.speed === v ? 'on' : ''}">${v}x</button>`).join('')}</div>
           ${battle ? '<button class="big" data-act="skip">⏭ 결과 바로 보기</button>'
+            : !sb && !s.wave.spawns.length ? `<button class="big primary" data-act="leave" ${s.queue.length ? 'disabled' : ''}>다음으로 ▶ <kbd>Space</kbd></button>`
             : `<button class="big fight" data-act="fight" ${board.length && s.wave.spawns.length ? '' : 'disabled'}>${ic('wave', 32)} 전투 시작 <kbd>Space</kbd></button>`}
           <div class="hint dim small">${battle || sb ? '' : board.length < slots ? `빈 칸 ${slots - board.length}개 — 대기석 유닛을 끌어다 놓으세요` : '오른쪽은 이번 적입니다 (마우스를 올려 보기)'}</div>
         </div>
@@ -311,7 +313,9 @@ function modal(s: R.RunState) {
   if (showSummary && s.last) return summaryModal(s)
   if (s.over) return endModal(s)
   if (s.queue[0] === 'commander') return cmdModal(s)
-  if (s.queue[0] === 'augment') return augModal(s)
+  if (s.queue[0] === 'path') return pathModal(s)
+  if (s.queue[0] === 'room') return roomModal(s)
+  if (R.isAugQ(s.queue[0])) return augModal(s)
   if (s.queue[0] === 'reward') return rewardModal(s)
   return ''
 }
@@ -344,11 +348,59 @@ function cmdModal(s: R.RunState) {
   </div></div>`
 }
 
+// 갈림길: 문마다 무엇이 있고 무엇을 주는지 보여 준다 (Hades 문 보상 표시, Slay the Spire 지도 아이콘)
+const DOOR: Record<R.DoorKind, { ic: string; name: string; desc: string }> = {
+  fight: { ic: 'wave', name: '전투', desc: '평범한 전투. 이기면 전리품과 문 보너스.' },
+  elite: { ic: 'elite', name: '정예 조우', desc: `적 전원 ×${R.ELITE_ROOM}, 둘은 접두사. 이기면 골드 증강체를 하나 더 고른다.` },
+  treasure: { ic: 'gold', name: '보물 창고', desc: '적 둘과 보물 고블린 셋. 도망치기 전에 잡을수록 골드.' },
+  shop: { ic: 'shop6', name: '떠돌이 상인', desc: '전투 없음. 아이템과 증강체를 골드로 판다.' },
+  rest: { ic: 'life', name: '휴식처', desc: '전투 없음. 생명 +1, 전원 단련, 지휘 경험치 중 하나.' },
+  event: { ic: 'codex', name: '사건 ?', desc: '전투 없음. 무슨 일이 기다리는지는 들어가 봐야 안다.' },
+}
+function pathModal(s: R.RunState) {
+  return `<div class="modal"><div class="box pick">
+    <h2>갈림길 — ${s.round + 1}라운드</h2>
+    <p class="dim">어느 문으로 갈까요. 전투 없는 방도 라운드 하나를 씁니다 (수입·경험치는 그대로).</p>
+    <div class="aug-cards doors">${(s.paths ?? []).map((d, i) => {
+      const k = DOOR[d.kind]
+      return `<div class="aug-card door ${d.kind}" data-act="pickPath" data-i="${i}"><div class="rar">${PEACE_KINDS.includes(d.kind) ? '전투 없음' : '전투'}</div>
+        <div class="em">${ic(k.ic, 64)}</div><h3>${k.name}</h3><p>${k.desc}</p>${d.bonus ? `<div class="res-hint">보너스: ${R.bonusText(d.bonus)}</div>` : ''}</div>`
+    }).join('')}</div>
+  </div></div>`
+}
+const PEACE_KINDS: R.DoorKind[] = R.PEACE
+
+function roomModal(s: R.RunState) {
+  const k = s.room?.kind
+  if (k === 'shop') return `<div class="modal"><div class="box pick">
+    <h2>떠돌이 상인</h2><p class="dim">마음에 드는 걸 사세요. 골드 ${ic('coin')}<b class="gold">${s.gold}</b></p>
+    <div class="aug-cards">${(s.offers ?? []).map((o, i) => {
+      const body = o.kind === 'item' ? `<div class="em">${ic(o.id, 64, ITEM[o.id].emoji)}</div><h3>${ITEM[o.id].name}</h3><p>${ITEM[o.id].desc}</p>`
+        : `<div class="em">${augIc(o.id, 64)}</div><h3>${AUG[o.id].name}</h3><p>${AUG[o.id].desc}</p>`
+      return `<div class="aug-card offer ${o.sold ? 'sold' : ''} ${o.kind === 'aug' ? 'r' + AUG[o.id].rarity : ''}" ${o.sold ? '' : `data-act="buyOffer" data-i="${i}"`} data-tip="${o.kind === 'item' ? 'i:' : 'a:'}${o.id}">
+        <div class="rar">${o.kind === 'aug' ? '증강체' : ITEM[o.id].from ? '조합 아이템' : '아이템'}</div>${body}<div class="price ${s.gold < o.price ? 'bad' : 'gold'}">${o.sold ? '판매됨' : `${ic('coin')}${o.price}`}</div></div>`
+    }).join('')}</div>
+    <button class="primary" data-act="leaveShop">나가기</button>
+  </div></div>`
+  if (k === 'rest') return `<div class="modal"><div class="box pick">
+    <h2>휴식처</h2><p class="dim">하나만 할 수 있습니다.</p>
+    <div class="aug-cards">${R.REST.map(r => `<div class="aug-card ${r.id === 'life' && s.lives >= s.maxLives ? 'off' : ''}" data-act="rest" data-id="${r.id}">
+      <div class="em">${ic(r.id === 'life' ? 'heart' : r.id === 'train' ? 'train' : 'slot', 64)}</div><h3>${r.name}</h3><p>${r.desc}${r.id === 'life' && s.lives >= s.maxLives ? ' (생명이 가득함)' : ''}</p></div>`).join('')}</div>
+  </div></div>`
+  const ev = EVENT[s.room?.event ?? '']
+  if (!ev) return ''
+  return `<div class="modal"><div class="box pick event">
+    <h2>${ev.name}</h2><p class="evtext">${ev.text}</p>
+    <div class="ev-choices">${ev.choices.map((c, i) => { const no = R.eventCan(s, i); return `<button class="${no || c.label === '지나친다' ? '' : 'primary'}" data-act="eventPick" data-i="${i}" ${no ? 'disabled' : ''}><b>${c.label}</b><span>${no ?? c.desc}</span></button>` }).join('')}</div>
+  </div></div>`
+}
+
 function augModal(s: R.RunState) {
   const pity = s.pity > 0
+  const gold = s.queue[0] === 'goldaug'
   return `<div class="modal"><div class="box pick">
-    <h2>증강체 선택</h2>
-    <p class="dim">${pity ? '역전의 기회 — 실버 등급이 거의 나오지 않습니다' : '하나를 고르세요. 빛나는 카드는 지금 가진 증강체와 공명합니다.'}</p>
+    <h2>${gold ? '정예 조우 보상' : '증강체 선택'}</h2>
+    <p class="dim">${gold ? '골드 등급 증강체 하나를 고르세요.' : pity ? '역전의 기회 — 실버 등급이 거의 나오지 않습니다' : '하나를 고르세요. 빛나는 카드는 지금 가진 증강체와 공명합니다.'}</p>
     <div class="aug-cards">${s.augChoices.map(id => augCard(s, id)).join('')}</div>
     <button data-act="rerollAug" ${s.augRerolls ? '' : 'disabled'}>${ic('augroll')} 새로고침 (${s.augRerolls}회 남음)</button>
   </div></div>`
@@ -699,6 +751,12 @@ function act(name: string, el?: HTMLElement) {
       else if (name === 'buyXp') { const e = R.buyXp(s); if (e) toast(e) }
       else if (name === 'useCmd') { const e = R.useCmd(s); if (e) toast(e) }
       else if (name === 'pickCmd') return choose(el!, () => R.pickCmd(s, d.id!))
+      else if (name === 'pickPath') return choose(el!, () => R.pickPath(s, +d.i!))
+      else if (name === 'leave') R.leaveRoom(s)
+      else if (name === 'buyOffer') { const e = R.buyOffer(s, +d.i!); if (e) toast(e); else celebrate(s.newRes.splice(0)) }
+      else if (name === 'leaveShop') R.leaveShop(s)
+      else if (name === 'rest') { const e = R.rest(s, d.id!); if (e) toast(e) }
+      else if (name === 'eventPick') { const e = R.eventPick(s, +d.i!); if (e) toast(e) }
       else if (name === 'sell' && sel.unit != null) { toast(`+${R.sell(s, sel.unit)} 골드`); sel = {} }
       else if (name === 'item') sel = sel.item === +d.i! ? {} : { item: +d.i! }
       else if (name === 'rerollAug') R.rerollAugs(s)
@@ -808,7 +866,7 @@ addEventListener('keydown', e => {
   if (e.code === 'Space') {
     e.preventDefault()
     if (showSummary) act('continue')
-    else if (!modal(run)) act('fight')
+    else if (!modal(run)) act(run.wave.spawns.length || run.sandbox ? 'fight' : 'leave')
   } else if (e.code === 'KeyD' && !modal(run) && !run.sandbox) act('reroll')
   else if (e.code === 'KeyF' && !modal(run) && !run.sandbox) act('buyXp')
   else if (e.code === 'Escape') { sel = {}; brush = null; render() }

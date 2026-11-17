@@ -1,9 +1,10 @@
 // 한 판(런)의 진행 상태. 전부 JSON 직렬화 가능 → localStorage에 그대로 저장.
 import { UNIT, UNITS, type TraitId, type UnitTpl } from './data/units.ts'
 import { AUG, AUGMENTS, RESONANCES, type AugDef, type PickCtx, type ResDef } from './data/augments.ts'
-import { ITEM, ITEMS, combine } from './data/items.ts'
+import { COMBOS, ITEM, ITEMS, combine } from './data/items.ts'
+import { EVENT, EVENTS, type EvCtx } from './data/events.ts'
 import { TRAITS, TRAIT_IDS } from './data/traits.ts'
-import { ENEMIES, applyAffix, endlessElites, enemyMult, makeWave, pickElites, type Wave } from './data/enemies.ts'
+import { ENEMIES, applyAffix, endlessElites, enemyMult, makeWave, pickElites, treasureWave, type Wave } from './data/enemies.ts'
 import { Battle, STEP, type Mod, type Side } from './battle.ts'
 import { mkRng, pick, pickW, rand, shuffle, type Rng } from './rng.ts'
 import { CMD, COMMANDERS } from './data/commanders.ts'
@@ -37,6 +38,13 @@ export type Reward =
   | { kind: 'train'; n: number }
   | { kind: 'slot' }
 
+// 갈림길 (Slay the Spire 지도·Hades 문처럼 다음 방을 고른다). 고정 라운드(1·정예·보스)는 고르지 않는다.
+export type DoorKind = 'fight' | 'elite' | 'treasure' | 'shop' | 'rest' | 'event'
+export type Bonus = { k: 'gold'; n: number } | { k: 'item' } | { k: 'xp'; n: number } | { k: 'reroll'; n: number }
+export interface Door { kind: DoorKind; bonus?: Bonus; event?: string }
+export interface Offer { kind: 'item' | 'aug'; id: string; price: number; sold?: boolean }
+export const PEACE: DoorKind[] = ['shop', 'rest', 'event'] // 전투 없는 방
+
 export interface Summary {
   win: boolean
   label: string
@@ -62,7 +70,7 @@ export interface RunState {
   wave: Wave
   augments: string[]
   items: string[]
-  queue: ('commander' | 'augment' | 'reward')[]
+  queue: ('commander' | 'augment' | 'goldaug' | 'reward' | 'path' | 'room')[] // goldaug = 정예 조우 보상 (골드 등급만)
   augChoices: string[]
   rewardChoices: Reward[]
   augRerolls: number
@@ -82,6 +90,11 @@ export interface RunState {
   cmdChoices?: string[]
   cmdUsed?: boolean // 능력형 사령관: 이번 라운드에 썼는지
   heat?: Record<string, number> // 위험도 규칙 id → 단계
+  paths?: Door[] // 고를 문
+  room?: Door // 지금 라운드의 방 (없으면 일반 전투)
+  offers?: Offer[] // 떠돌이 상인 진열
+  curse?: string // 사건 '버려진 병영': 다음 전투 적 전원 접두사
+  augOnly?: number // 사건이 연 증강체 선택: 이 등급만
   promise?: string // 공명술사: 약속한 공명 id (그 짝 중 아직 없는 쪽이 증강체 선택에 반드시 나온다)
   newRes: string[]
   notes: string[] // UI가 꺼내서 토스트로 보여준다
@@ -102,9 +115,26 @@ function decorate(s: RunState, w: Wave): Wave {
     for (const sp of shuffle(s.rng, plain).slice(0, s.round >= 11 ? 2 : 1)) sp.aff = pick(s.rng, AFFIXES).id
   }
   if (heatRank(s, 'boss') && w.kind !== 'normal') w.spawns[0].mult *= 1.4
+  if (s.curse && w.spawns.length) { for (const sp of w.spawns) sp.aff = s.curse; s.curse = undefined }
   return w
 }
 const nextWave = (s: RunState) => decorate(s, makeWave(s.round, s.rng, s.elites))
+
+// 방 → 이번 라운드 편성
+export const ELITE_ROOM = 2.4
+const ROOM_NAME: Record<DoorKind, string> = { fight: '전투', elite: '정예 조우', treasure: '보물 창고', shop: '떠돌이 상인', rest: '휴식처', event: '사건' }
+function roomWave(s: RunState, d: Door): Wave {
+  if (d.kind === 'treasure') return decorate(s, treasureWave(s.round, s.rng))
+  if (PEACE.includes(d.kind)) return { label: d.kind === 'event' ? `사건 · ${EVENT[d.event!]?.name ?? '?'}` : ROOM_NAME[d.kind], kind: 'normal', spawns: [] }
+  const w = nextWave(s)
+  if (d.kind === 'elite' && w.kind === 'normal') {
+    // 정예 조우: 적 전원 ×2.4, 둘에 접두사. 이기면 골드 증강체 하나를 더 고른다 (전리품은 일반 등급)
+    for (const sp of w.spawns) sp.mult *= ELITE_ROOM
+    for (const sp of shuffle(s.rng, w.spawns.filter(x => !x.aff && x.tpl !== 'treasure')).slice(0, 2)) sp.aff = pick(s.rng, AFFIXES).id
+    Object.assign(w, { kind: 'elite', label: '정예 조우 · ' + w.label.split(' · ').pop(), hint: '정예 조우: 이기면 증강체를 하나 더 고른다' + (w.hint ? ' · ' + w.hint : '') })
+  }
+  return w
+}
 export const boardOf = (s: RunState) => s.units.filter(u => u.pos !== null)
 export const benchOf = (s: RunState) => s.units.filter(u => u.pos === null)
 export const slotsOf = (s: RunState) => Math.min(12, levelOf(s.xp).lv + 2 + s.bonusSlots)
@@ -392,7 +422,7 @@ export function summarize(s: RunState, b: Battle): Summary {
   }
   return {
     win: b.win, label: s.wave.label, kind: s.wave.kind, time: b.t, dmg: [...agg.values()].sort((a, c) => c.v - a.v),
-    counts: { ...b.counts }, maxHit: b.maxHit, growth: 0, loot: b.counts.treasure ? 4 + s.round : 0,
+    counts: { ...b.counts }, maxHit: b.maxHit, growth: 0, loot: (b.counts.treasure ?? 0) * (4 + s.round),
   }
 }
 
@@ -417,17 +447,138 @@ export function endBattle(s: RunState, b: Battle): Summary {
   if (s.over) return sum
   s.after = true
   if (isAugRound(s.round) || (!win && kind === 'boss')) queueAug(s)
-  if (win) { s.queue.push('reward'); rollRewards(s, kind !== 'normal') }
+  if (win && s.room?.kind === 'elite') queueAug(s, 'goldaug') // 정예 조우 보상
+  if (win && s.room?.bonus) giveBonus(s, s.room.bonus)
+  if (win) { s.queue.push('reward'); rollRewards(s, kind !== 'normal' && s.room?.kind !== 'elite') }
+  queuePath(s)
   if (!s.queue.length) advance(s)
   return sum
 }
 
+function giveBonus(s: RunState, b: Bonus) {
+  if (b.k === 'gold') s.gold += b.n
+  else if (b.k === 'item') s.items.push(pick(s.rng, ITEMS).id)
+  else if (b.k === 'xp') s.xp += b.n
+  else s.freeRerolls += b.n
+  s.notes.push(`갈림길 보너스: ${bonusText(b)}`)
+}
+export const bonusText = (b: Bonus) => (b.k === 'gold' ? `골드 +${b.n}` : b.k === 'item' ? '아이템 +1' : b.k === 'xp' ? `경험치 +${b.n}` : `무료 새로고침 +${b.n}`)
+
+// ── 갈림길
+const eliteAt = (s: RunState, r: number) => (s.elites ?? { 5: 'troll', 10: 'scorpion', 15: 'boss' })[r]
+const nextRound = (s: RunState) => (s.last?.win === false && s.round === MAX_ROUND ? s.round : s.round + 1)
+export const isFixed = (s: RunState, r: number) => r <= 1 || r === MAX_ROUND || !!eliteAt(s, r)
+
+function queuePath(s: RunState) {
+  s.room = undefined
+  const r = nextRound(s)
+  if (s.sandbox || isFixed(s, r)) return
+  const w: [DoorKind, number][] = [['fight', 3], ['treasure', 1], ['event', 1.6]]
+  if (r >= 3) w.push(['elite', 1], ['shop', 1])
+  if (r >= 4) w.push(['rest', s.lives < s.maxLives ? 1.6 : 0.8])
+  const kinds: DoorKind[] = []
+  while (kinds.length < 3) kinds.push(pickW(s.rng, w.filter(([k]) => !kinds.includes(k)), x => x[1])[0])
+  if (!kinds.some(k => k === 'fight' || k === 'elite' || k === 'treasure')) kinds[2] = 'fight' // 싸울 문은 늘 하나 이상
+  s.paths = kinds.map((k): Door => {
+    if (k === 'fight') return { kind: k, bonus: pick(s.rng, [{ k: 'gold', n: 3 + Math.ceil(r * 0.5) }, { k: 'item' }, { k: 'xp', n: 4 }, { k: 'reroll', n: 3 }] as Bonus[]) }
+    if (k === 'event') return { kind: k, event: pick(s.rng, EVENTS).id }
+    return { kind: k }
+  })
+  s.queue.push('path')
+}
+
+export function pickPath(s: RunState, i: number) {
+  const d = s.paths?.[i]
+  if (s.queue[0] !== 'path' || !d) return
+  s.room = d
+  s.paths = []
+  finishPick(s)
+}
+
+// 전투 없는 방에서 '다음으로'
+export function leaveRoom(s: RunState) {
+  if (s.queue.length || s.wave.spawns.length || s.over || s.sandbox) return
+  s.after = true
+  s.last = null
+  queuePath(s)
+  if (!s.queue.length) advance(s)
+}
+
+// ── 떠돌이 상인: 기본 아이템 둘, 조합 아이템 하나, 증강체 하나
+function rollOffers(s: RunState) {
+  const aug = AUGMENTS.filter(a => a.rarity < 3 && !has(s, a.id) && !a.crest && (!a.locked || s.unlocked.includes('a_' + a.id)))
+  s.offers = [
+    ...shuffle(s.rng, [...ITEMS]).slice(0, 2).map((it): Offer => ({ kind: 'item', id: it.id, price: 4 })),
+    { kind: 'item', id: pick(s.rng, COMBOS).id, price: 10 },
+    ...(aug.length ? [{ kind: 'aug', id: pick(s.rng, aug).id, price: 12 } as Offer] : []),
+  ]
+}
+
+export function buyOffer(s: RunState, i: number): string | null {
+  const o = s.offers?.[i]
+  if (!o || o.sold || s.queue[0] !== 'room') return null
+  if (s.gold < o.price) return '골드가 부족합니다'
+  s.gold -= o.price
+  o.sold = true
+  if (o.kind === 'item') s.items.push(o.id)
+  else {
+    const before = activeRes(s).map(r => r.id)
+    s.augments.push(o.id)
+    AUG[o.id].onPick?.(ctx(s))
+    s.newRes.push(...activeRes(s).map(r => r.id).filter(r => !before.includes(r)))
+  }
+  return null
+}
+
+// ── 휴식처: 셋 중 하나
+export const REST = [
+  { id: 'life', name: '쉬어 간다', desc: '생명 +1' },
+  { id: 'train', name: '단련한다', desc: '배치된 유닛 전원 영구 +15%' },
+  { id: 'study', name: '전략을 짠다', desc: '지휘 경험치 +8' },
+] as const
+
+export function rest(s: RunState, id: string): string | null {
+  if (s.queue[0] !== 'room' || s.room?.kind !== 'rest') return null
+  if (id === 'life') { if (s.lives >= s.maxLives) return '생명이 가득합니다'; s.lives++ }
+  else if (id === 'train') for (const u of boardOf(s)) u.bonus += 0.15
+  else s.xp += 8
+  s.queue.shift()
+  return null
+}
+
+// ── 사건
+const evCtx = (s: RunState): EvCtx => ({
+  s,
+  addUnit: (t, star) => addUnit(s, t, star),
+  addItem: id => { const it = id === 'combo' ? pick(s.rng, COMBOS) : id ? ITEM[id] : pick(s.rng, ITEMS); s.items.push(it.id); return it.name },
+  augment: rarity => { s.augOnly = rarity; rollAugs(s); if (s.augChoices.length) s.queue.splice(1, 0, 'augment'); else s.augOnly = undefined },
+  topTpl: cost => { const top = topTraits(s); const pool = shopPool(s).filter(t => !cost || t.cost === cost); return (pool.find(t => t.traits.some(x => top[0] === x)) ?? pick(s.rng, pool)).id },
+  best: () => [...boardOf(s)].sort((a, b) => UNIT[b.tpl].cost * 3 ** b.star - UNIT[a.tpl].cost * 3 ** a.star)[0],
+  rand: () => rand(s.rng),
+})
+export const eventCan = (s: RunState, i: number) => EVENT[s.room?.event ?? '']?.choices[i]?.can?.(evCtx(s)) ?? null
+
+export function eventPick(s: RunState, i: number): string | null {
+  const c = EVENT[s.room?.event ?? '']?.choices[i]
+  if (s.queue[0] !== 'room' || !c) return null
+  const no = eventCan(s, i)
+  if (no) return no
+  s.notes.push(c.apply(evCtx(s)))
+  s.queue.shift()
+  return null
+}
+
+export function leaveShop(s: RunState) { if (s.queue[0] === 'room' && s.room?.kind === 'shop') s.queue.shift() }
+
 // 무한 원정은 16·19·22…에도 증강체
 export const isAugRound = (r: number) => AUG_ROUNDS.includes(r) || (r > MAX_ROUND && (r - MAX_ROUND) % 3 === 1)
 // 고를 증강체가 남아 있을 때만 (무한 원정에서 다 모으면 건너뜀)
-function queueAug(s: RunState) {
+export const isAugQ = (q: RunState['queue'][number] | undefined) => q === 'augment' || q === 'goldaug'
+function queueAug(s: RunState, kind: 'augment' | 'goldaug' = 'augment') {
+  s.queue.push(kind)
+  if (s.queue.length > 1) return // 앞 선택을 마치면 finishPick이 굴린다
   rollAugs(s)
-  if (s.augChoices.length) s.queue.push('augment')
+  if (!s.augChoices.length) s.queue.pop()
 }
 
 // 15R 클리어 뒤 계속 (Balatro 엔드리스): 보스 전리품을 받고 16R로
@@ -453,13 +604,17 @@ function advance(s: RunState) {
   if (interest) s.notes.push(`금화 상인: 이자 +${interest} 골드`)
   if (isCmd(s, 'smith') && s.round % 4 === 0) { const it = pick(s.rng, ITEMS); s.items.push(it.id); s.notes.push(`대장장이: ${it.name}`) }
   s.cmdUsed = false
-  s.freeRerolls = has(s, 'midas') ? 1 : 0
-  s.wave = nextWave(s)
+  s.freeRerolls = Math.max(s.freeRerolls, has(s, 'midas') ? 1 : 0) // 갈림길 보너스로 받은 무료 새로고침은 남긴다
+  const room = s.room ?? { kind: 'fight' }
+  s.wave = roomWave(s, room)
+  if (PEACE.includes(room.kind)) { s.queue.push('room'); if (room.kind === 'shop') rollOffers(s) }
   rollShop(s)
 }
 
 function finishPick(s: RunState) {
   s.queue.shift()
+  // 증강체가 연달아 있으면 (증강체 라운드 + 정예 조우) 차례가 왔을 때 굴린다
+  while (isAugQ(s.queue[0]) && !s.augChoices.length) { rollAugs(s); if (s.augChoices.length) break; s.queue.shift() }
   if (!s.queue.length && s.after) advance(s)
 }
 
@@ -468,7 +623,9 @@ const formsRes = (s: RunState, id: string) => RESONANCES.some(r => r.pair.includ
 
 export function rollAugs(s: RunState) {
   const top = topTraits(s)
-  const pool = AUGMENTS.filter(a => !has(s, a.id) && (!a.locked || s.unlocked.includes('a_' + a.id)) && (!a.crest || top.includes(a.crest)))
+  const all = AUGMENTS.filter(a => !has(s, a.id) && (!a.locked || s.unlocked.includes('a_' + a.id)) && (!a.crest || top.includes(a.crest)))
+  const only = s.queue[0] === 'goldaug' ? 2 : s.augOnly
+  const pool = only && all.some(a => a.rarity === only) ? all.filter(a => a.rarity === only) : all
   const late = s.round >= 7
   const w = (a: AugDef) => {
     const base = a.rarity === 1 ? (late ? 3 : 5) : a.rarity === 2 ? 4 : late ? 2.2 : 1.2
@@ -491,7 +648,7 @@ export function rollAugs(s: RunState) {
 }
 
 export function rerollAugs(s: RunState) {
-  if (s.augRerolls <= 0 || s.queue[0] !== 'augment') return
+  if (s.augRerolls <= 0 || !isAugQ(s.queue[0])) return
   s.augRerolls--
   rollAugs(s)
 }
@@ -505,11 +662,12 @@ const ctx = (s: RunState): PickCtx => ({
 
 // 반환: 이번에 새로 켜진 공명 id
 export function pickAug(s: RunState, id: string): string[] {
-  if (s.queue[0] !== 'augment' || !s.augChoices.includes(id)) return []
+  if (!isAugQ(s.queue[0]) || !s.augChoices.includes(id)) return []
   const before = activeRes(s).map(r => r.id)
   s.augments.push(id)
   s.pity = 0
   s.augChoices = []
+  s.augOnly = undefined
   // 공명술사: 약속한 짝을 고르면 다음에 나머지 짝, 다른 걸 고르거나 공명이 켜지면 끝
   const pp = RESONANCES.find(r => r.id === s.promise)?.pair
   if (!pp?.includes(id) || pp.every(p => has(s, p))) s.promise = undefined

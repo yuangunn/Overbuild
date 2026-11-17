@@ -253,7 +253,8 @@ kbd { font: 12px Galmuri11, monospace; color: var(--k); background: var(--lgrey)
 @keyframes synUp { 0% { transform: scale(1.08); filter: brightness(2) } 100% { transform: none } }
 
 .aug-card { animation: cardIn .45s steps(6) both }
-.aug-card:nth-child(2) { animation-delay: .08s } .aug-card:nth-child(3) { animation-delay: .16s }
+.aug-card:nth-child(2) { animation-delay: .08s } .aug-card:nth-child(3) { animation-delay: .16s } .aug-card:nth-child(4) { animation-delay: .24s }
+.aug-cards:has(> :nth-child(4)) { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px } .aug-cards:has(> :nth-child(4)) h3 { font-size: 20px }
 @keyframes cardIn { from { transform: translateY(40px) scale(.85); opacity: 0 } }
 .aug-card.resonant { animation: cardIn .45s steps(6) both, blink .8s steps(2) infinite }
 .aug-card.chosen { animation: chosen .43s steps(6) forwards !important; z-index: 2 }
@@ -362,3 +363,12 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 18px; border: 0; bord
 .tok.evo .base { --rc: var(--cyan); animation: blink 1s steps(2) infinite }
 .tok.evo .st { color: var(--cyan) }
 .skill.evo { color: var(--cyan) }
+
+/* ── 갈림길·방 */
+.aug-card.door.elite { border-image-source: url(./assets/ui/p2-red.png) } .aug-card.door.treasure { border-image-source: url(./assets/ui/p2-gold.png) }
+.aug-card.door.shop, .aug-card.door.rest, .aug-card.door.event { border-image-source: url(./assets/ui/p2-green.png) }
+.aug-card.offer .price { margin-top: auto; font-size: 16px; font-weight: 700; display: flex; justify-content: center; align-items: center; gap: 2px }
+.aug-card.sold { opacity: .45; cursor: default } .aug-card.off { opacity: .5 }
+.box.event .evtext { font-size: 14px; max-width: 560px; margin: 8px auto 16px; text-align: center }
+.ev-choices { display: flex; flex-direction: column; gap: 8px; max-width: 560px; margin: 0 auto }
+.ev-choices button { display: flex; flex-direction: column; align-items: flex-start; text-align: left } .ev-choices button span { font-size: 12px; color: var(--white); text-shadow: 1px 1px 0 var(--k) } .ev-choices button b { text-shadow: 1px 1px 0 var(--k) }
