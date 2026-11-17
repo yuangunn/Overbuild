@@ -237,7 +237,7 @@ export function applyAffix(f: Fighter, id: string) {
 }
 
 // ponytail: 난이도 곡선은 이 한 줄. scripts/levels.ts 라운드별 통계를 보고 조절.
-// 무한 원정(16R~)은 15R 배율에서 라운드마다 25%씩 곱으로 오른다 (Balatro 엔드리스처럼 결국 따라잡힌다)
+// 무한 원정(16R~)은 15R 배율에서 n라운드 뒤 ×1.3ⁿ × 1.01^(n²): 오르는 폭도 커진다 (Balatro 엔드리스처럼 결국 따라잡힌다)
 // 갈림길 보물 방: 그 라운드 편성에서 둘만 남기고 보물 고블린 셋
 export function treasureWave(r: number, rng: Rng): Wave {
   const keep = makeWave(r, rng, {}).spawns.filter(sp => sp.tpl !== 'treasure').slice(0, 2)
@@ -249,7 +249,7 @@ export function treasureWave(r: number, rng: Rng): Wave {
 // 무한 원정 방어력: 최대 체력 비례 효과(시체 폭발·처형 연쇄)도 결국 막히게 모든 피해를 줄인다
 export const ENDLESS_ARMOR = 30
 const quad = (r: number) => 1 + 0.35 * (r - 1) + 0.045 * (r - 1) ** 2
-export const enemyMult = (r: number) => (r <= 15 ? quad(r) : quad(15) * 1.25 ** (r - 15))
+export const enemyMult = (r: number) => (r <= 15 ? quad(r) : quad(15) * 1.3 ** (r - 15) * 1.01 ** ((r - 15) ** 2))
 
 export const ZONE = ['고블린 숲', '망자의 폐허', '심연의 문']
 const COUNT = [2, 3, 3, 4, 0, 4, 5, 5, 6, 0, 6, 7, 7, 8, 0]

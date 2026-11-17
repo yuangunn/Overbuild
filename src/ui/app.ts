@@ -482,7 +482,7 @@ function endModal(s: R.RunState) {
     ${s.seed != null ? `<p class="dim small">시드 ${R.seedCode(s.seed)}</p>` : ''}
     <div class="shards">${ic('shard', 32)} +${earned} 별조각 <span class="dim">${heatOf(s.heat) ? `위험도 ${heatOf(s.heat)} ×${shardMult(heatOf(s.heat)).toFixed(1)} · ` : ''}(보유 ${meta.shards})</span></div>
     ${next.length ? `<p class="gold">지금 해금할 수 있는 것 ${next.length}개 · ${next.slice(0, 3).map(u => u.name).join(', ')}${next.length > 3 ? ' …' : ''}</p>` : ''}
-    ${win ? `<button class="primary big" data-act="endless">${ic('wave', 32)} 무한 원정 계속</button><p class="dim small">이 빌드 그대로 16라운드부터. 적은 라운드마다 25%씩 강해지고 방어력과 접두사가 쌓입니다. 끝나면 그 뒤 몫만큼 별조각을 더 받습니다.</p>` : ''}
+    ${win ? `<button class="primary big" data-act="endless">${ic('wave', 32)} 무한 원정 계속</button><p class="dim small">이 빌드 그대로 16라운드부터. 적은 갈수록 더 빠르게 강해지고(라운드마다 ×1.3 이상) 방어력과 접두사가 쌓이며, 60초 안에 다 쓰러뜨려야 이깁니다. 끝나면 그 뒤 몫만큼 별조각을 더 받습니다.</p>` : ''}
     <div class="row">${s.daily ? '<button class="big" data-act="daily">일일 도전 다시</button>' : ''}<button class="${win ? '' : 'primary'} big" data-act="new">한 판 더!</button><button data-act="meta">${ic('shard')} 영구 성장</button><button data-act="title">타이틀</button></div>
   </div></div>`
 }

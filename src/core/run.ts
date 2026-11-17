@@ -447,6 +447,7 @@ export function buildBattle(s: RunState): Battle {
     if (sp.armor) f.armor += sp.armor
   }
   if (heatRank(s, 'timer')) b.limit = 35
+  if (s.endless) b.limit = Math.min(b.limit || 60, 60) // 무한 원정은 다 쓰러뜨려야 이긴다 (시간 끝 체력 비교 없음)
   b.start()
   return b
 }
