@@ -341,3 +341,13 @@ input[type=range] { -webkit-appearance: none; appearance: none; height: 8px; bac
 input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 18px; background: var(--yellow); box-shadow: 0 0 0 2px var(--k), inset -2px -2px 0 var(--orange) }
 input[type=range]::-moz-range-thumb { width: 12px; height: 18px; border: 0; border-radius: 0; background: var(--yellow) }
 .hp-body h3 { color: var(--white) } .hp-body h3::before { display: none }
+
+/* ── 위험도 계약 */
+.menu .row { align-items: center }
+.pactbtn.on { border-image-source: url(./assets/ui/b2-red.png); color: var(--white) }
+.rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0 16px }
+.rule { display: flex; align-items: center; gap: 10px; padding: 6px 10px; cursor: pointer; border: 8px solid transparent; border-image: url(./assets/ui/p2-grey.png) 8 fill / 8px }
+.rule:hover { filter: brightness(1.15) }
+.rule.on { border-image-source: url(./assets/ui/p2-red.png) }
+.rule .cost { color: var(--orange); min-width: 52px } .rule .body { flex: 1; display: flex; flex-direction: column }
+.rule .pips { display: flex; gap: 3px } .rule .pips i { width: 10px; height: 10px; background: var(--k); box-shadow: 0 0 0 1px var(--grey) } .rule .pips i.on { background: var(--red) }

@@ -7,6 +7,7 @@ import { TRAITS, TRAIT_IDS } from '../core/data/traits.ts'
 import { AUG, AUGMENTS, RESONANCES } from '../core/data/augments.ts'
 import { ITEM, ITEMS } from '../core/data/items.ts'
 import { CMD } from '../core/data/commanders.ts'
+import { HEAT, HEAT_RULE, heatOf, shardMult } from '../core/data/heat.ts'
 import { LIMITS, PASSIVES, SKILL_SRC, cleanHero, newHero, powerGrade, registerHeroes, skillDesc, type HeroDef, type Stat } from '../core/heroes.ts'
 import * as R from '../core/run.ts'
 import * as M from '../core/meta.ts'
@@ -14,7 +15,7 @@ import { playBattle, fmt, drawFloor, type Player } from './arena.ts'
 import { SPR, SHEET_NAMES, sprHTML, sprAt, cellsOf, isSheet, iconHTML, floorImg, CREDITS, type Sheet } from './sprites.ts'
 import { version } from '../../package.json'
 
-type Screen = 'title' | 'run' | 'meta' | 'codex' | 'heroes'
+type Screen = 'title' | 'run' | 'meta' | 'codex' | 'heroes' | 'pact'
 
 let meta = M.loadMeta()
 let run: R.RunState | null = (r => r && R.fixRun(r))(M.loadRun())
@@ -68,7 +69,7 @@ const PARADE = ['shieldbearer', 'ranger', 'apprentice', 'cutthroat', 'wolf', 'fr
 // ───────────────────────── 렌더
 function render() {
   hideTip()
-  $app.innerHTML = screen === 'title' ? titleScreen() : screen === 'meta' ? metaScreen() : screen === 'codex' ? codexScreen() : screen === 'heroes' ? heroesScreen() : run ? runScreen(run) : ''
+  $app.innerHTML = screen === 'title' ? titleScreen() : screen === 'meta' ? metaScreen() : screen === 'codex' ? codexScreen() : screen === 'heroes' ? heroesScreen() : screen === 'pact' ? pactScreen() : run ? runScreen(run) : ''
   paintFloor()
 }
 
@@ -90,7 +91,8 @@ function titleScreen() {
     <div class="parade">${PARADE.map(id => sprHTML(id, '', '', 0)).join('')}<span style="width:40px"></span>${['goblin', 'orc', 'boss'].map(id => sprHTML(id, '', '', 1)).join('')}</div>
     <p class="tag">작은 선택이 쌓여, 사기 조합이 완성되는 순간.</p>
     <div class="menu">
-      <button class="primary big" data-act="new">${ic('wave', 32)} 새 원정</button>
+      <div class="row"><button class="primary big" data-act="new">${ic('wave', 32)} 새 원정</button>
+        <button class="pactbtn ${heatOf(meta.heat) ? 'on' : ''}" data-act="pact">${ic('elite')} 위험도 ${heatOf(meta.heat)}${heatOf(meta.heat) ? ` · 별조각 ×${shardMult(heatOf(meta.heat)).toFixed(1)}` : ''}</button></div>
       ${cont ? `<button class="big" data-act="resume">▶ 이어하기 · ${run!.endless ? '무한 ' : ''}${run!.round}라운드</button>` : ''}
       <div class="row">
         <button data-act="meta">${ic('shard')} 영구 성장 <b class="gold">${meta.shards}</b></button>
@@ -123,6 +125,24 @@ function metaScreen() {
   </div>`
 }
 
+// 위험도 계약 (Hades 형벌 계약처럼 원하는 규칙만 골라 어렵게, 그만큼 보상)
+function pactScreen() {
+  const heat = heatOf(meta.heat)
+  return `<div class="page pact">
+    <header class="page-head"><button class="ghost" data-act="title">← 뒤로</button><h2>위험도 계약</h2>
+      <div class="pill ${heat ? 'warn' : ''}">위험도 <b>${heat}</b></div><div class="pill gold">${ic('shard')} 별조각 ×${shardMult(heat).toFixed(1)}</div>
+      <div class="pill">클리어 최고 위험도 ${meta.heatBest}</div></header>
+    <p class="dim">어려움은 원할 때만. 규칙을 눌러 켜고 단계를 올리면, 그만큼 원정이 끝날 때 별조각을 더 받습니다. 설정은 다음 원정에도 남습니다.</p>
+    <div class="rules">${HEAT.map(h => {
+      const n = meta.heat[h.id] ?? 0
+      return `<div class="rule ${n ? 'on' : ''}" data-act="pactRule" data-id="${h.id}">
+        <b class="cost">+${h.cost}${h.max > 1 ? '/단계' : ''}</b><div class="body"><b>${h.name}</b><span class="dim">${h.desc(n || 1)}</span></div>
+        <span class="pips">${Array.from({ length: h.max }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('')}</span></div>`
+    }).join('')}</div>
+    <div class="row"><button class="primary big" data-act="new">${ic('wave', 32)} 위험도 ${heat}로 출발</button>${heat ? '<button class="ghost" data-act="pactClear">모두 끄기</button>' : ''}</div>
+  </div>`
+}
+
 function codexScreen() {
   return `<div class="page">
     <header class="page-head"><button class="ghost" data-act="title">← 뒤로</button><h2>공명 도감</h2><div class="pill">${meta.found.length}/${RESONANCES.length}</div></header>
@@ -148,7 +168,7 @@ function runScreen(s: R.RunState) {
       <div class="brand">OVER<b>BUILD</b></div>
       ${sb ? sandTop(s) : `<div class="pill ${s.endless ? 'endless' : ''}">${s.endless ? `무한 원정 <b>${s.round}</b>R` : `라운드 <b>${s.round}</b>/${R.MAX_ROUND}`}</div>
       <div class="pill wave ${s.wave.kind}">${ic(s.wave.kind === 'normal' ? 'wave' : s.wave.kind)} ${s.wave.label}</div>
-      ${nextElite(s)}${cmdPill(s)}
+      ${nextElite(s)}${cmdPill(s)}${heatOf(s.heat) ? `<div class="pill warn" data-tip="h:">${ic('elite')}위험도 ${heatOf(s.heat)}</div>` : ''}
       <div class="pill lives" title="생명">${ic('heart').repeat(Math.max(0, s.lives))}${ic('heart0').repeat(Math.max(0, s.maxLives - s.lives))}</div>
       <div class="pill gold" title="골드">${ic('coin')}<b>${s.gold}</b></div>
       <div class="pill ${board.length < slots ? 'warn' : ''}" title="배치">${sprHTML('shieldbearer', '', 'mini', 0)}${board.length}/${slots}</div>`}
@@ -189,7 +209,7 @@ function runScreen(s: R.RunState) {
         <div class="lbl">상점 ${selU ? `<button class="sell" data-act="sell">${UNIT[selU.tpl].name} 판매 +${R.sellValue(selU)}${ic('coin')}</button>` : '<span class="dim small">유닛을 여기로 끌어오면 판매</span>'}</div>
         <div class="cards">${s.shop.map((id, i) => shopCard(s, id, i)).join('')}
           <div class="shopbtns">${xpButton(s)}
-          <button class="reroll" data-act="reroll" ${s.gold < 1 && !s.freeRerolls ? 'disabled' : ''}>새로고침<span>${s.freeRerolls ? '무료' : `1${ic('coin')}`}</span><kbd>D</kbd></button></div>
+          <button class="reroll" data-act="reroll" ${s.gold < R.rerollCost(s) && !s.freeRerolls ? 'disabled' : ''}>새로고침<span>${s.freeRerolls ? '무료' : `${R.rerollCost(s)}${ic('coin')}`}</span><kbd>D</kbd></button></div>
         </div>
       </div>
     </footer>`}
@@ -382,7 +402,7 @@ function endModal(s: R.RunState) {
 
     <div class="endstats">${s.cmd ? `<span>${sprHTML('cmd_' + s.cmd, '', 'mini', 0)}${CMD[s.cmd].name}</span>` : ''}<span>승리 <b>${s.stats.won}</b></span><span>정예 <b>${s.stats.elite}</b></span><span>최대 일격 <b>${fmt(s.stats.bestHit)}</b></span></div>
     <div class="aug-line">${s.augments.map(id => `<span data-tip="a:${id}">${augIc(id, 32)}</span>`).join('')}${R.activeRes(s).map(r => `<span class="res" data-tip="r:${r.id}">${augIc(r.id, 32)}</span>`).join('')}</div>
-    <div class="shards">${ic('shard', 32)} +${earned} 별조각 <span class="dim">(보유 ${meta.shards})</span></div>
+    <div class="shards">${ic('shard', 32)} +${earned} 별조각 <span class="dim">${heatOf(s.heat) ? `위험도 ${heatOf(s.heat)} ×${shardMult(heatOf(s.heat)).toFixed(1)} · ` : ''}(보유 ${meta.shards})</span></div>
     ${next.length ? `<p class="gold">지금 해금할 수 있는 것 ${next.length}개 · ${next.slice(0, 3).map(u => u.name).join(', ')}${next.length > 3 ? ' …' : ''}</p>` : ''}
     ${win ? `<button class="primary big" data-act="endless">${ic('wave', 32)} 무한 원정 계속</button><p class="dim small">이 빌드 그대로 16라운드부터. 적은 라운드마다 25%씩 강해지고 방어력과 접두사가 쌓입니다. 끝나면 그 뒤 몫만큼 별조각을 더 받습니다.</p>` : ''}
     <div class="row"><button class="${win ? '' : 'primary'} big" data-act="new">한 판 더!</button><button data-act="meta">${ic('shard')} 영구 성장</button><button data-act="title">타이틀</button></div>
@@ -424,7 +444,7 @@ function tipHTML(key: string): string {
     const t = R.tplOf(sp.tpl)
     if (!t) return ''
     const a = sp.aff ? AFFIX[sp.aff] : undefined
-    const m = sp.mult * STAR_MULT[(sp.star ?? 1) - 1]
+    const m = sp.mult * STAR_MULT[(sp.star ?? 1) - 1] * R.heatMult(run)
     return `<div class="tip-h">${sprHTML(t.id, t.emoji, 'tipspr', 1)} <b>${a ? `<span style="color:${a.color}">${a.name}</span> ` : ''}${t.name}</b>${sp.star && sp.star > 1 ? ` <span class="gold">${stars(sp.star)}</span>` : ''}</div>
       <div class="stats">체력 ${fmt(t.hp * m)} · 공격 ${fmt(t.atk * m)} · 사거리 ${t.range}${sp.armor ? ` · <span class="bad">방어 +${sp.armor}</span>` : ''}</div>${t.skillName ? `<div><b class="skill">${t.skillName}</b><br>${t.skillDesc}</div>` : ''}${a ? `<div><b style="color:${a.color}">${a.name}</b> ${a.desc}</div>` : ''}`
   }
@@ -442,6 +462,10 @@ function tipHTML(key: string): string {
     return `<div class="tip-h">${ic(d.id, 32)} <b>${d.name}</b>${sy?.crest ? ' <span class="gold">문장: 효과 2배</span>' : ''}</div>
       ${d.tiers.map((n, i) => `<div class="${sy && sy.tier > i ? 'good' : 'dim'}">(${n}) ${d.desc[i]}</div>`).join('')}
       <div class="small who-list">${who.map(t => sprHTML(t.id, t.emoji, 'mini', 0) + t.name).join(' ')}</div>`
+  }
+  if (k === 'h' && run) {
+    const on = HEAT.filter(h => R.heatRank(run!, h.id))
+    return `<div class="tip-h">${ic('elite', 32)} <b>위험도 ${heatOf(run.heat)}</b> <span class="gold">별조각 ×${shardMult(heatOf(run.heat)).toFixed(1)}</span></div>${on.map(h => `<div><b>${h.name}</b> <span class="dim">${h.desc(R.heatRank(run!, h.id))}</span></div>`).join('')}`
   }
   if (k === 'c' && run?.cmd) {
     const c = CMD[run.cmd]
@@ -488,7 +512,7 @@ function toast(msg: string, big = false) {
 function startNew() {
   player?.stop()
   battle = null
-  run = R.newRun(meta)
+  run = R.newRun(meta) // 고른 위험도(meta.heat)를 그대로 건다
   sel = {}
   showSummary = false
   screen = 'run'
@@ -507,7 +531,7 @@ function startBattle() {
   player = playBattle($app.querySelector<HTMLCanvasElement>('#cv')!, b, () => meta.speed, finishBattle, () => {
     const ot = b.overtime
     const boss = b.fighters.find(f => f.boss && f.alive)
-    hud.innerHTML = `<span class="${ot > 1 ? 'hot' : 'dim'}">⏱ ${b.t.toFixed(1)}초${ot > 1 ? ` · 격노 ×${ot.toFixed(1)}` : ''}</span>`
+    hud.innerHTML = `<span class="${ot > 1 || (b.limit && b.limit - b.t < 10) ? 'hot' : 'dim'}">⏱ ${b.t.toFixed(1)}${b.limit ? ` / ${b.limit}` : ''}초${ot > 1 ? ` · 격노 ×${ot.toFixed(1)}` : ''}</span>`
       + (boss ? `<span class="bossbar"><i style="width:${(boss.hp / boss.maxHp) * 100}%"></i><em>${boss.name} ${fmt(boss.hp)}</em></span>` : '')
   }, { zone: zoneOf(run), res })
 }
@@ -632,6 +656,15 @@ function act(name: string, el?: HTMLElement) {
     case 'sAug': if (run?.sandbox && !battle) R.sandAug(run, d.id!); break
     case 'sAugClear': if (run?.sandbox && !battle) run.augments = []; break
     case 'meta': screen = 'meta'; break
+    case 'pact': screen = 'pact'; break
+    case 'pactRule': {
+      const h = HEAT_RULE[d.id!]
+      const n = ((meta.heat[h.id] ?? 0) + 1) % (h.max + 1)
+      if (n) meta.heat[h.id] = n
+      else delete meta.heat[h.id]
+      M.saveMeta(meta)
+    } break
+    case 'pactClear': meta.heat = {}; M.saveMeta(meta); break
     case 'codex': screen = 'codex'; break
     case 'unlock': { const e = M.buyUnlock(meta, d.id!); toast(e ?? '해금! 다음 원정부터 적용됩니다') } break
     case 'speed':

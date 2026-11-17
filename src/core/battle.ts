@@ -137,6 +137,7 @@ export class Battle {
   win = false
   readonly mods: [Mod[], Mod[]]
   readonly slots: number
+  limit = 0 // 위험도 '제한 시간': 이 초가 지나면 패배 (0 = 없음)
   private q: { t: number; fn: () => void }[] = []
   private rng: Rng
   private uid = 1
@@ -185,6 +186,7 @@ export class Battle {
     let a0 = false, a1 = false
     for (const f of this.fighters) if (f.alive) f.side === 0 ? (a0 = true) : (a1 = true)
     if (!a0 || !a1) { this.done = true; this.win = a0 }
+    else if (this.limit && this.t >= this.limit) { this.done = true; this.win = false }
     else if (this.t >= MAX_T) { this.done = true; this.win = this.hpFrac(0) > this.hpFrac(1) }
   }
 

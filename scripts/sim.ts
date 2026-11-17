@@ -260,6 +260,39 @@ console.log('\n[1e] 시작 사령관')
   ok(mer.round === 2 && mer.gold === 27 + R.income(mer, true) + 2, '금화 상인: 골드 27 → 수입 + 이자 2')
 }
 
+// ───────────────────────── 1f. 위험도
+console.log('\n[1f] 위험도')
+{
+  const heat = { tough: 2, affix: 1, boss: 1, lives: 1, shop: 1, income: 2, drought: 1, timer: 1 }
+  const s = R.newRun({ unlocked: [], heat }, 21)
+  ok(s.lives === 2 && s.shopSize === 4 && s.shop.length === 4 && R.rerollCost(s) === 2, '줄어든 생명·빈약한 상점: 생명 2, 상점 4칸, 새로고침 2골드')
+  s.queue = []
+  const b = R.buildBattle(s)
+  const foe = b.fighters.find(f => f.side === 1)!
+  ok(Math.abs(foe.maxHp / (foe.tpl.hp * s.wave.spawns[0].mult) - 1.2) < 0.01 && b.limit === 35, '단단한 적 2단계: 적 체력 ×1.2, 제한 시간 35초')
+  ok(R.income(s, true) === R.income({ ...s, heat: {} }, true) - 2, '인색한 수입 2단계: 수입 -2')
+  s.queue = ['augment']; R.rollAugs(s)
+  ok(s.augChoices.length === 2, '증강체 가뭄: 선택지 2장')
+  // 6라운드 일반 편성은 접두사 1명 이상, 10라운드 정예는 체력 ×1.4
+  s.round = 5; s.after = true; s.last = { win: true } as R.Summary; s.queue = ['reward']; s.rewardChoices = [{ kind: 'gold', n: 0 }]
+  R.pickReward(s, 0)
+  ok(s.round === 6 && s.wave.kind === 'normal' && s.wave.spawns.some(sp => sp.aff), '정예의 행진: 6라운드 일반 편성에 접두사')
+  const plain = R.newRun({ unlocked: [] }, 21)
+  s.round = 9; s.after = true; s.queue = ['reward']; s.rewardChoices = [{ kind: 'gold', n: 0 }]
+  R.pickReward(s, 0)
+  plain.round = 10; plain.wave = makeWave(10, plain.rng, s.elites)
+  ok(s.wave.kind === 'elite' && Math.abs(s.wave.spawns[0].mult / plain.wave.spawns[0].mult - 1.4) < 0.01, '극한의 정예: 정예 배율 ×1.4')
+  const m = { ...M.loadMeta(), shards: 0, heatBest: 0 }
+  s.over = 'win'; s.stats = { won: 10, elite: 2, bestHit: 0, fresh: 0 }
+  const got = M.settle(m, s)
+  ok(got === Math.round((10 + 4 + 10) * 2.5) && m.heatBest === 15, `정산: 위험도 15 → 별조각 ×2.5 (+${got}), 클리어 최고 위험도 기록`)
+  const t = R.newRun({ unlocked: [], heat: { timer: 1 } }, 3)
+  vs(t, 'dummy', 1); t.units = [{ id: 1, tpl: 'shieldbearer', star: 1, items: [], pos: 9, bonus: 0 }]
+  const tb = R.buildBattle(t)
+  while (!tb.done) tb.step(STEP)
+  ok(!tb.win && tb.t < 36, `제한 시간: 허수아비를 못 잡으면 35초에 패배 (${tb.t.toFixed(1)}초)`)
+}
+
 // ───────────────────────── 2. 사기 빌드 (15라운드 보스)
 console.log('\n[2] 사기 빌드 — 15라운드 보스, 시드 20개')
 interface Build { name: string; team: Spec[]; augs: string[]; bonus?: number }

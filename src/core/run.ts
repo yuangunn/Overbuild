@@ -7,6 +7,8 @@ import { ENEMIES, applyAffix, endlessElites, enemyMult, makeWave, pickElites, ty
 import { Battle, STEP, type Mod, type Side } from './battle.ts'
 import { mkRng, pick, pickW, rand, shuffle, type Rng } from './rng.ts'
 import { CMD, COMMANDERS } from './data/commanders.ts'
+import { AFFIXES } from './data/enemies.ts'
+import { HEAT_RULE } from './data/heat.ts'
 
 export const MAX_ROUND = 15
 export const AUG_ROUNDS = [1, 4, 7, 10, 13]
@@ -78,6 +80,7 @@ export interface RunState {
   cmd?: string // 시작 사령관 (v0.3 저장분엔 없음 → 없이 진행)
   cmdChoices?: string[]
   cmdUsed?: boolean // 능력형 사령관: 이번 라운드에 썼는지
+  heat?: Record<string, number> // 위험도 규칙 id → 단계
   promise?: string // 공명술사: 약속한 공명 id (그 짝 중 아직 없는 쪽이 증강체 선택에 반드시 나온다)
   newRes: string[]
   notes: string[] // UI가 꺼내서 토스트로 보여준다
@@ -85,6 +88,22 @@ export interface RunState {
 
 const has = (s: RunState, id: string) => s.augments.includes(id)
 const isCmd = (s: RunState, id: string) => s.cmd === id
+export const heatRank = (s: RunState, id: string) => Math.min(HEAT_RULE[id]?.max ?? 0, s.heat?.[id] ?? 0)
+// 위험도 '단단한 적': 전투를 만들 때 적 전체에 곱한다 (편성 배율은 그대로 두고 화면도 이 값을 곱해 보여 준다)
+export const heatMult = (s: RunState) => 1 + 0.1 * heatRank(s, 'tough')
+export const rerollCost = (s: RunState) => (heatRank(s, 'shop') ? 2 : 1)
+
+// 위험도를 편성에 입힌다: 일반 편성 접두사 추가, 정예·보스 강화
+function decorate(s: RunState, w: Wave): Wave {
+  if (s.sandbox) return w
+  if (heatRank(s, 'affix') && w.kind === 'normal' && s.round >= 6) {
+    const plain = w.spawns.filter(sp => !sp.aff && sp.tpl !== 'treasure')
+    for (const sp of shuffle(s.rng, plain).slice(0, s.round >= 11 ? 2 : 1)) sp.aff = pick(s.rng, AFFIXES).id
+  }
+  if (heatRank(s, 'boss') && w.kind !== 'normal') w.spawns[0].mult *= 1.4
+  return w
+}
+const nextWave = (s: RunState) => decorate(s, makeWave(s.round, s.rng, s.elites))
 export const boardOf = (s: RunState) => s.units.filter(u => u.pos !== null)
 export const benchOf = (s: RunState) => s.units.filter(u => u.pos === null)
 export const slotsOf = (s: RunState) => Math.min(12, levelOf(s.xp).lv + 2 + s.bonusSlots)
@@ -100,14 +119,15 @@ export const cellXY = (cell: number, side: Side) => {
   return { x: side === 0 ? 0.7 + c : 6.3 + c, y: 0.5 + (cell % ROWS) }
 }
 
-export function newRun(meta: { unlocked: string[] }, seed = Date.now()): RunState {
+export function newRun(meta: { unlocked: string[]; heat?: Record<string, number> }, seed = Date.now()): RunState {
   const u = meta.unlocked
-  const lives = 3 + (u.includes('life') ? 1 : 0)
+  const heat = { ...(meta.heat ?? {}) }
+  const lives = Math.max(1, 3 + (u.includes('life') ? 1 : 0) - (heat.lives ? 1 : 0))
   const rng = mkRng(seed)
   const elites = pickElites(rng)
   const s: RunState = {
-    rng, round: 1, lives, maxLives: lives, gold: 6 + (u.includes('gold') ? 3 : 0), elites,
-    units: [], nextId: 1, xp: 0, shop: [], shopSize: u.includes('shop6') ? 6 : 5, wave: makeWave(1, rng, elites),
+    rng, round: 1, lives, maxLives: lives, gold: 6 + (u.includes('gold') ? 3 : 0), elites, heat,
+    units: [], nextId: 1, xp: 0, shop: [], shopSize: (u.includes('shop6') ? 6 : 5) - (heat.shop ? 1 : 0), wave: makeWave(1, rng, elites),
     augments: [], items: [], queue: [], augChoices: [], rewardChoices: [],
     augRerolls: 1 + (u.includes('augroll') ? 1 : 0), freeRerolls: 0, bonusSlots: 0, pity: 0, after: false,
     unlocked: [...u], stats: { won: 0, elite: 0, bestHit: 0, fresh: 0 }, over: null, last: null, newRes: [], notes: [],
@@ -180,7 +200,7 @@ export function rollShop(s: RunState, only?: (t: UnitTpl) => boolean) {
 
 export function reroll(s: RunState): string | null {
   if (s.freeRerolls > 0) s.freeRerolls--
-  else if (s.gold >= 1) s.gold--
+  else if (s.gold >= rerollCost(s)) s.gold -= rerollCost(s)
   else return '골드가 부족합니다'
   rollShop(s)
   return null
@@ -326,10 +346,11 @@ export function buildBattle(s: RunState): Battle {
     const { x, y } = cellXY(sp.cell, 1)
     const t = tplOf(sp.tpl)
     if (!t) continue
-    const f = b.add(t, sp.star ?? 1, 1, x, y, sp.mult)
+    const f = b.add(t, sp.star ?? 1, 1, x, y, sp.mult * heatMult(s))
     if (sp.aff) applyAffix(f, sp.aff)
     if (sp.armor) f.armor += sp.armor
   }
+  if (heatRank(s, 'timer')) b.limit = 35
   b.start()
   return b
 }
@@ -398,7 +419,7 @@ export function goEndless(s: RunState) {
   rollRewards(s, true)
 }
 
-export const income = (s: RunState, won: boolean) => 5 + Math.floor(s.round / 3) + (won ? 1 : 2) + (has(s, 'midas') ? 2 : 0)
+export const income = (s: RunState, won: boolean) => 5 + Math.floor(s.round / 3) + (won ? 1 : 2) + (has(s, 'midas') ? 2 : 0) - heatRank(s, 'income')
 
 function advance(s: RunState) {
   s.after = false
@@ -411,7 +432,7 @@ function advance(s: RunState) {
   if (isCmd(s, 'smith') && s.round % 4 === 0) { const it = pick(s.rng, ITEMS); s.items.push(it.id); s.notes.push(`대장장이: ${it.name}`) }
   s.cmdUsed = false
   s.freeRerolls = has(s, 'midas') ? 1 : 0
-  s.wave = makeWave(s.round, s.rng, s.elites)
+  s.wave = nextWave(s)
   rollShop(s)
 }
 
@@ -432,7 +453,7 @@ export function rollAugs(s: RunState) {
     return s.pity > 0 && a.rarity === 1 ? base * 0.1 : base // 역전의 기회: 실버 거의 안 나옴
   }
   const out: AugDef[] = []
-  const n = isCmd(s, 'seer') ? 4 : 3
+  const n = (isCmd(s, 'seer') ? 4 : 3) - heatRank(s, 'drought')
   const pair = s.promise ? RESONANCES.find(r => r.id === s.promise)?.pair : undefined
   const promised = pair ? pool.find(a => pair.includes(a.id)) : undefined
   if (promised) out.push(promised)
@@ -514,7 +535,7 @@ export function pickReward(s: RunState, i: number) {
 // 같은 RunState를 쓰되 sandbox = true. 합체(mergeAll)는 거치지 않고, 보상·라운드 진행도 없다.
 export function newSandbox(): RunState {
   const s = newRun({ unlocked: [] }, Date.now())
-  Object.assign(s, { sandbox: true, round: 10, gold: 0, shop: [], bonusSlots: 12, augRerolls: 0 })
+  Object.assign(s, { sandbox: true, round: 10, gold: 0, shop: [], bonusSlots: 12, augRerolls: 0, queue: [], cmdChoices: [] })
   s.wave = { label: '샌드박스', kind: 'normal', spawns: [] }
   return s
 }
