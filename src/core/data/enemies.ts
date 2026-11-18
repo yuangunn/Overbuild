@@ -1,6 +1,6 @@
 // 적 유닛과 라운드별 웨이브. 난이도 곡선은 enemyMult 하나로 조절한다.
 import type { Battle, Fighter, Mod, Side } from '../battle.ts'
-import { SKELETON, type UnitTpl } from './units.ts'
+import { SKELETON, jiangshiOwn, type UnitTpl } from './units.ts'
 import { pick, pickW, rand, shuffle, type Rng } from '../rng.ts'
 
 const foe = (f: Fighter) => (1 - f.side) as Side
@@ -132,6 +132,54 @@ export const ENEMIES: Record<string, UnitTpl> = {
       },
     }],
   }),
+  // ── 동방에서 흘러든 요괴
+  dokkaebi: E({
+    id: 'dokkaebi', name: '도깨비', emoji: '👹', hp: 540, atk: 45, as: 0.75, range: 1, armor: 20, mana: 0,
+    skillName: '도깨비불', skillDesc: '쓰러지면 도깨비불 둘이 튀어나와 달려든다 (닿으면 터짐).',
+    own: () => [{
+      id: 'wisps',
+      onDeath(b, f) {
+        for (const dy of [-0.45, 0.45]) b.summon(f.side, ENEMIES.wisp, f.x, f.y + dy, { maxHp: f.maxHp * 0.25, atk: f.atk * 0.6 })
+        b.label(f, '도깨비불!', '#d27d2c')
+      },
+    }],
+  }),
+  wisp: E({
+    id: 'wisp', name: '도깨비불', emoji: '🔥', size: 0.55, hp: 170, atk: 40, as: 1, range: 1, armor: 0, mana: 0, speed: 2.8,
+    skillName: '불씨', skillDesc: '닿으면 터져 주변 적에게 공격력 150% 피해.',
+    own: () => [{
+      id: 'wispbomb',
+      onAttack(b, f) { b.kill(f, null) },
+      onDeath(b, f) { blast(b, f, 1.1, f.atk * 1.5, [foe(f)], '#d27d2c') },
+    }],
+  }),
+  clubber: E({
+    id: 'clubber', name: '방망이 도깨비', emoji: '👺', hp: 420, atk: 46, as: 0.7, range: 3, armor: 10, mana: 80, startMana: 20,
+    skillName: '뚝딱', skillDesc: '방망이를 두드려 모든 아군에게 공격력 180% 보호막.',
+    skill(b, f) {
+      for (const a of b.alive(f.side)) a.shield += f.atk * 1.8
+      b.label(f, '뚝딱!', '#dad45e')
+      b.emit({ k: 'ring', x: f.x, y: f.y, r: 1.5, color: '#dad45e', style: 'shield' })
+    },
+  }),
+  lantern: E({
+    id: 'lantern', name: '등롱 요괴', emoji: '🏮', hp: 440, atk: 42, as: 0.7, range: 3, armor: 10, mana: 70,
+    skillName: '도깨비 등불', skillDesc: '대상 주변에 불을 뿌려 공격력 140% 피해, 1.5초 동안 화상 (그 피해의 30%).',
+    skill(b, f) {
+      const t = f.target?.alive ? f.target : b.nearest(f.x, f.y, foe(f))
+      if (!t) return
+      for (const e of b.inRadius(t.x, t.y, 1, foe(f))) {
+        const d = b.damage(f, e, f.atk * 1.4, { kind: 'skill' })
+        for (const s of [0.5, 1, 1.5]) b.later(s, () => b.damage(f, e, d * 0.1, { kind: 'proc', noMult: true }))
+      }
+      b.emit({ k: 'ring', x: t.x, y: t.y, r: 1, color: '#d27d2c', style: 'fire' })
+    },
+  }),
+  jiangshi: E({
+    id: 'jiangshi', name: '강시', emoji: '🧟', hp: 820, atk: 50, as: 0.6, range: 1, armor: 35, mana: 0, speed: 1.2,
+    skillName: '흡기', skillDesc: '때린 대상의 체력을 빨아들이고 둔화시킨다.',
+    own: jiangshiOwn,
+  }),
   // ── 정예 (라운드마다 둘 중 하나, 원정 시작 때 정해져 미리 보인다)
   goblinking: E({
     id: 'goblinking', name: '고블린 왕', emoji: '👑', size: 0.95, hp: 2900, atk: 80, as: 0.8, range: 1, armor: 30, mana: 70, startMana: 20,
@@ -165,6 +213,31 @@ export const ENEMIES: Record<string, UnitTpl> = {
       b.emit({ k: 'ring', x: t.x, y: t.y, r: 1.8, color: '#6dc2ca', style: 'ice' })
     },
   }),
+  gumiho: E({
+    id: 'gumiho', name: '구미호', emoji: '🦊', size: 0.95, hp: 2600, atk: 84, as: 0.85, range: 2, armor: 25, mana: 80, dodge: 0.3,
+    skillName: '여우불', skillDesc: '무작위 적 넷에게 여우불을 날려 공격력 150% 피해. 기본 공격 30%를 피하고, 체력 60%·30%에서 꼬리 분신 둘을 부른다.',
+    skill(b, f) {
+      const es = b.alive(foe(f))
+      for (let i = 0; i < 4 && es.length; i++) {
+        const t = es[Math.floor(b.r() * es.length)]
+        b.emit({ k: 'shot', x1: f.x, y1: f.y, x2: t.x, y2: t.y, color: '#6dc2ca', style: 'spirit' })
+        b.damage(f, t, f.atk * 1.5, { kind: 'skill' })
+      }
+      b.banner('구미호의 여우불!', '#6dc2ca')
+    },
+    own: () => [{
+      id: 'tails',
+      onDamaged(b, f) {
+        const ph = f.st.phase ?? 0
+        const th = [0.6, 0.3][ph]
+        if (th === undefined || f.hp >= f.maxHp * th) return
+        f.st.phase = ph + 1
+        b.banner('구미호가 꼬리를 나눈다!', '#6dc2ca')
+        for (const dy of [-0.8, 0.8]) b.summon(f.side, ENEMIES.foxclone, f.x - 0.5, f.y + dy, { maxHp: f.maxHp * 0.2, atk: f.atk * 0.4 })
+      },
+    }],
+  }),
+  foxclone: E({ id: 'foxclone', name: '꼬리 분신', emoji: '🦊', size: 0.6, hp: 600, atk: 40, as: 0.9, range: 1, armor: 10, mana: 0, dodge: 0.3 }),
   boss: E({
     id: 'boss', name: '심연의 군주', emoji: '😈', boss: true, hp: 8500, atk: 120, as: 0.7, range: 1.5, armor: 60, mana: 60,
     skillName: '멸망의 파동', skillDesc: '모든 적에게 최대 체력 18% + 공격력 50% 피해. 체력 66%·33%에서 격노하며 악마를 부른다.',
@@ -254,10 +327,10 @@ export const enemyMult = (r: number) => (r <= 15 ? quad(r) : quad(15) * 1.3 ** (
 export const ZONE = ['고블린 숲', '망자의 폐허', '심연의 문']
 const COUNT = [2, 3, 3, 4, 0, 4, 5, 5, 6, 0, 6, 7, 7, 8, 0]
 // 정예 라운드: 원정을 시작할 때 둘 중 하나로 정해 미리 보여 준다 (Slay the Spire 지도의 보스 표시처럼)
-export const ELITES: Record<number, string[]> = { 5: ['troll', 'goblinking'], 10: ['scorpion', 'lich'], 15: ['boss'] }
+export const ELITES: Record<number, string[]> = { 5: ['troll', 'goblinking'], 10: ['scorpion', 'lich', 'gumiho'], 15: ['boss'] }
 const ESCORT: Record<string, string[]> = {
   troll: ['goblin', 'goblin', 'thrower'], goblinking: ['goblin', 'thrower', 'thrower'],
-  scorpion: ['orc', 'spider', 'skelarcher'], lich: ['wraith', 'skelarcher', 'skelarcher'], boss: ['demon', 'demon', 'shaman'],
+  scorpion: ['orc', 'spider', 'skelarcher'], lich: ['wraith', 'skelarcher', 'skelarcher'], gumiho: ['dokkaebi', 'lantern', 'clubber'], boss: ['demon', 'demon', 'shaman'],
 }
 export const pickElites = (rng: Rng): Record<number, string> => ({ 5: pick(rng, ELITES[5]), 10: pick(rng, ELITES[10]), 15: 'boss' })
 // 무한 원정: 20·30·40… 정예(넷 중 하나), 25·35·45… 최종 보스 재등장
@@ -271,18 +344,21 @@ const ENCOUNTERS: Encounter[][] = [
   [
     { name: '고블린 약탈대', from: 1, make: (n, rng) => fill(n, ['thrower'], ['goblin', 'goblin', 'slime'], rng) },
     { name: '슬라임 둥지', from: 1, hint: '왕슬라임은 쓰러지면 둘로 나뉨', make: (n, rng) => fill(n, ['kingslime'], ['slime', 'kingslime', 'thrower'], rng) },
+    { name: '도깨비 장난', from: 3, hint: '도깨비는 쓰러지면 도깨비불 둘이 튀어나와 터짐', make: (n, rng) => fill(n, ['dokkaebi'], ['goblin', 'dokkaebi', 'thrower'], rng) },
     { name: '자폭 부대', from: 3, hint: '자폭 고블린은 붙으면 터짐 — 멀리서 잡으면 적이 휘말림', make: (n, rng) => fill(n, ['bomber', 'goblin'], ['bomber', 'goblin', 'thrower'], rng) },
   ],
   [
     { name: '해골 궁수대', from: 6, make: (n, rng) => fill(n, ['orc', 'skelarcher', 'skelarcher'], ['orc', 'skelarcher', 'goblin'], rng) },
     { name: '강령 의식', from: 6, hint: '강령 사제가 해골을 계속 부름 — 먼저 노리기', make: (n, rng) => fill(n, ['priest', 'wraith'], ['priest', 'skelarcher', 'orc'], rng) },
     { name: '박쥐 떼', from: 7, hint: '박쥐가 후열로 날아듦', make: (n, rng) => fill(n, ['orc', 'shaman'], ['bat', 'bat', 'skelarcher'], rng) },
+    { name: '강시 행렬', from: 7, hint: '강시는 때린 대상의 체력을 빨아들이고 둔화시킴', make: (n, rng) => fill(n, ['jiangshi', 'jiangshi', 'lantern'], ['jiangshi', 'skelarcher', 'lantern'], rng) },
     { name: '망령 기사단', from: 8, hint: '망령 기사는 한 번 되살아남', make: (n, rng) => fill(n, ['wraith', 'wraith', 'shaman'], ['wraith', 'skelarcher', 'priest'], rng) },
   ],
   [
     { name: '악마 군단', from: 11, affixes: 1, make: (n, rng) => fill(n, ['demon', 'demon', 'shaman'], ['demon', 'skelarcher', 'orc'], rng) },
     { name: '독거미 둥지', from: 11, affixes: 1, hint: '거미줄에 걸리면 2초 기절', make: (n, rng) => fill(n, ['orc', 'spider', 'spider'], ['spider', 'skelarcher', 'bat'], rng) },
     { name: '사령 군단', from: 12, affixes: 1, hint: '사제·기사가 망자를 계속 세움', make: (n, rng) => fill(n, ['priest', 'wraith', 'demon'], ['wraith', 'priest', 'skelarcher', 'demon'], rng) },
+    { name: '백귀야행', from: 12, affixes: 1, hint: '동방 요괴 행렬 — 도깨비불·화상·보호막', make: (n, rng) => fill(n, ['dokkaebi', 'clubber', 'lantern'], ['dokkaebi', 'jiangshi', 'lantern', 'clubber'], rng) },
     { name: '심연 균열', from: 13, affixes: 2, hint: '접두사 정예 둘', make: (n, rng) => fill(n, ['demon', 'spider'], ['orc', 'demon', 'spider', 'bat', 'skelarcher', 'shaman', 'bomber'], rng) },
   ],
 ]

@@ -3,6 +3,7 @@
 import type { RunState } from '../run.ts'
 import { AUG } from './augments.ts'
 import { isBase } from './items.ts'
+import { UNITS } from './units.ts'
 
 export interface EvCtx {
   s: RunState
@@ -17,6 +18,7 @@ export interface EvCtx {
 export interface EvChoice { label: string; desc: string; can?: (c: EvCtx) => string | null; apply: (c: EvCtx) => string }
 export interface EventDef { id: string; name: string; text: string; choices: EvChoice[] }
 
+const EAST_RELICS = ['gourd', 'seal', 'talisman']
 const pass: EvChoice = { label: '지나친다', desc: '아무것도 하지 않는다.', apply: () => '그냥 지나쳤다.' }
 const gold = (n: number) => (c: EvCtx) => (c.s.gold < n ? `골드 ${n}이 필요합니다` : null)
 
@@ -97,6 +99,24 @@ export const EVENTS: EventDef[] = [
     choices: [
       { label: '20골드를 바친다', desc: '유물 셋 중 하나를 고른다. 유물은 다른 아이템과 합쳐지지 않는 고유 아이템이다.', can: gold(20), apply: c => { c.s.gold -= 20; c.forge('relic'); return '모루 위에 낯선 물건이 놓였다.' } },
       { label: '생명 1을 바친다', desc: '찬란한 아이템 셋 중 하나를 고른다. 조합 아이템의 효과가 모두 두 배다.', can: c => (c.s.lives <= 1 ? '생명이 하나뿐입니다' : null), apply: c => { c.s.lives--; c.forge('radiant'); return '화로가 눈부시게 타올랐다.' } },
+      pass,
+    ],
+  },
+  {
+    id: 'eastern', name: '동방에서 온 상인', text: '낯선 옷차림의 상인이 비단 보따리를 푼다. "먼 동쪽 땅의 물건이오. 함께 건너온 무인도 있소."',
+    choices: [
+      { label: '6골드로 무인을 들인다', desc: '동방 유닛 ★2 하나 (1~2골드 유닛 중 무작위).', can: gold(6), apply: c => {
+        const pool = UNITS.filter(u => u.traits.includes('east') && u.cost <= 2 && !u.locked)
+        const t = pool[Math.floor(c.rand() * pool.length)]
+        c.s.gold -= 6
+        c.addUnit(t.id, 2)
+        return `${t.name}이(가) 합류했다.`
+      } },
+      { label: '12골드로 보물을 산다', desc: '동방 유물 하나 (취권 호리병·전국 옥새·봉인 부적 중 무작위). 유물은 다른 아이템과 합쳐지지 않는다.', can: gold(12), apply: c => {
+        const id = EAST_RELICS[Math.floor(c.rand() * EAST_RELICS.length)]
+        c.s.gold -= 12
+        return `${c.addItem(id)}을(를) 손에 넣었다.`
+      } },
       pass,
     ],
   },

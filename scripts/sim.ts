@@ -170,7 +170,7 @@ console.log('\n[1b] 기믹')
   }
   ok(bad === 0, `편성 ${seen.size}종 × 300시드: 모든 적이 실재하고 칸이 겹치지 않음`)
   const el = R.newRun({ unlocked: [] }, 11)
-  ok(['troll', 'goblinking'].includes(el.elites![5]) && ['scorpion', 'lich'].includes(el.elites![10]), `정예 예고: 5R ${el.elites![5]} · 10R ${el.elites![10]}`)
+  ok(['troll', 'goblinking'].includes(el.elites![5]) && ['scorpion', 'lich', 'gumiho'].includes(el.elites![10]), `정예 예고: 5R ${el.elites![5]} · 10R ${el.elites![10]}`)
 }
 
 // ───────────────────────── 1c. 샌드박스·나만의 영웅
@@ -518,6 +518,69 @@ console.log('\n[1k] 숨은 아이템')
   eb.wave = { label: 'boss', kind: 'boss', spawns: [] }
   settle(eb, true)
   ok(eb.forge === 'radiant', '무한 원정 보스를 쓰러뜨리면 찬란한 무기고')
+}
+
+console.log('\n[1l] 동방 유닛·요괴')
+{
+  const EAST = UNITS.filter(u => u.traits.includes('east')).map(u => u.id)
+  const FOES = ['dokkaebi', 'wisp', 'clubber', 'lantern', 'jiangshi', 'gumiho', 'foxclone']
+  const bad: string[] = []
+  for (const id of EAST) for (const foe of ['brute', ...FOES]) {
+    try {
+      const b = run(vs(setup(8, [[id, 2], ['shieldbearer', 2]]), foe, 3), 20)
+      if (b.fighters.some(f => !Number.isFinite(f.hp) || !Number.isFinite(f.x) || !Number.isFinite(f.y))) bad.push(`${id}/${foe}`)
+    } catch (e) { bad.push(`${id}/${foe}:${(e as Error).message}`) }
+  }
+  ok(EAST.length === 7 && !bad.length, `동방 유닛 ${EAST.length}종 × 적 ${FOES.length + 1}종 전투에서 오류·NaN 없음 ${bad.join(' ')}`)
+
+  const syn = (board: Spec[]) => { const b = R.buildBattle(vs(setup(8, board), 'dummy', 1)); return mine(b) }
+  const two = syn([['monk', 1], ['archer', 1], ['bear', 1]])
+  const four = syn([['monk', 1], ['archer', 1], ['swordsman', 1], ['taoist', 1], ['bear', 1]])
+  const dg = (fs: Fighter[], id: string) => fs.find(f => f.tpl.id === id)!.dodge
+  ok(dg(two, 'monk') === 0.2 && dg(two, 'bear') === 0 && Math.abs(dg(four, 'monk') - 0.35) < 1e-9 && Math.abs(dg(four, 'bear') - 0.1) < 1e-9 && dg(syn([['monk', 1], ['bear', 1]]), 'monk') === 0,
+    '동방 2명: 동방 유닛 회피 20% / 4명: 35%, 다른 아군도 10% / 1명: 없음')
+
+  const sp = R.buildBattle(vs(setup(8, [['monk', 2], ['archer', 2], ['bear', 2]]), 'brute', 3))
+  let dodged = 0, countered = 0
+  for (const f of mine(sp)) f.own.push({ id: 'spy', onDodge() { dodged++ } })
+  for (const e of sp.fighters.filter(f => f.side === 1)) e.own.push({ id: 'spy2', onDamaged(_b, _f, src) { if (src?.tpl.id === 'monk' || src?.tpl.id === 'archer') countered++ } })
+  while (!sp.done && sp.t < 15) sp.step(STEP)
+  ok(dodged > 0 && countered > 0, `회피하면 반격한다 (15초 동안 회피 ${dodged}번)`)
+
+  const sealed = setup(8, [['bear', 1, ['seal']], ['monk', 1]])
+  const sy = R.synergies(sealed).find(x => x.id === 'east')
+  const sb = R.buildBattle(vs(sealed, 'dummy', 1))
+  ok(sy?.count === 2 && sy.tier === 1 && of(sb, 'bear').traits.includes('east') && of(sb, 'bear').dodge === 0.2, '전국 옥새: 동방 특성을 얻어 시너지 인원에 들어가고 회피도 받는다')
+  const dup = setup(8, [['monk', 1, ['seal']], ['monk', 1], ['archer', 1]])
+  ok(R.synergies(dup).find(x => x.id === 'east')?.count === 2, '같은 유닛 둘은 옥새가 있어도 특성마다 한 번만 센다')
+
+  const tb = R.buildBattle(vs(setup(8, [['bear', 1, ['talisman']]]), 'brute', 3))
+  while (tb.t < 0.3) tb.step(STEP)
+  ok(tb.fighters.some(f => f.side === 1 && f.stunT > 2), '봉인 부적: 시작하자마자 공격력이 가장 높은 적을 3초 기절')
+  const gb = R.buildBattle(vs(setup(8, [['bear', 1, ['gourd']]]), 'dummy', 1))
+  while (gb.t < 4.5) gb.step(STEP)
+  ok(of(gb, 'bear').buffs.some(x => x.as === 0.4), '취권 호리병: 4초마다 마시고 공격 속도 +40%')
+
+  const jm = run(vs(setup(8, [['jiangshimaster', 2], ['bear', 2]]), 'dummy', 1), 12)
+  ok(mine(jm).filter(f => f.summoned && f.tpl.id === 'jiangshi_s').length >= 2, '흑도사 ★2: 강시 둘을 부른다')
+  const dk = run(vs(setup(8, [['bear', 3], ['archer', 3]]), 'dokkaebi', 2), 20)
+  ok(dk.fighters.filter(f => f.side === 1 && f.tpl.id === 'wisp').length === 4, '도깨비가 쓰러지면 도깨비불 둘씩')
+  const gm = setup(10, [['bear', 3]]); gm.wave = makeWave(10, gm.rng, { 10: 'gumiho' })
+  const gmb = R.buildBattle(gm), gf = gmb.fighters.find(f => f.tpl.id === 'gumiho')!
+  gf.hp = gf.maxHp * 0.55
+  gmb.damage(null, gf, 1, { kind: 'proc' })
+  ok(gm.wave.kind === 'elite' && gm.wave.spawns[0].tpl === 'gumiho' && gf.dodge === 0.3 && gmb.fighters.filter(f => f.tpl.id === 'foxclone').length === 2, '구미호: 10R 정예 후보, 회피 30%, 체력 60% 아래에서 꼬리 분신 둘')
+
+  const locked = R.newRun({ unlocked: [] }, 3), open = R.newRun({ unlocked: ['u_general'] }, 3)
+  ok(!R.shopPool(locked).some(t => t.id === 'general') && R.shopPool(open).some(t => t.id === 'general') && UNLOCKS.some(u => u.id === 'u_general'), '청룡도 장수: 별조각으로 해금해야 상점에 나온다')
+
+  const ev = R.newRun({ unlocked: [] }, 7)
+  Object.assign(ev, { queue: ['room'], room: { kind: 'event', event: 'eastern' }, gold: 20, units: [] })
+  R.eventPick(ev, 0)
+  ok(ev.gold === 14 && ev.units.length === 1 && UNIT[ev.units[0].tpl].traits.includes('east') && ev.units[0].star === 2, '동방에서 온 상인: 6골드 → 동방 유닛 ★2')
+  Object.assign(ev, { queue: ['room'] })
+  R.eventPick(ev, 1)
+  ok(ev.gold === 2 && ['gourd', 'seal', 'talisman'].some(id => ev.items.includes(id)), '12골드 → 동방 유물 하나')
 }
 
 

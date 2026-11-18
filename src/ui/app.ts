@@ -828,7 +828,7 @@ function act(name: string, el?: HTMLElement) {
       else if (name === 'buyOffer') { const e = R.buyOffer(s, +d.i!); if (e) toast(e); else celebrate(s.newRes.splice(0)) }
       else if (name === 'leaveShop') R.leaveShop(s)
       else if (name === 'rest') { const e = R.rest(s, d.id!); if (e) toast(e) }
-      else if (name === 'eventPick') { const e = R.eventPick(s, +d.i!); if (e) toast(e) }
+      else if (name === 'eventPick') { const n0 = s.items.length, e = R.eventPick(s, +d.i!); if (e) toast(e); else discover(s.items.slice(n0)) }
       else if (name === 'sell' && sel.unit != null) { toast(`+${R.sell(s, sel.unit)} 골드`); sel = {} }
       else if (name === 'item') sel = sel.item === +d.i! ? {} : { item: +d.i! }
       else if (name === 'rerollAug') R.rerollAugs(s)

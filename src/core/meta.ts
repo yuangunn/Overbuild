@@ -26,6 +26,7 @@ export const UNLOCKS = [
   { id: 'u_phoenix', emoji: '🔥', name: '불사조', desc: '유닛 · 비전/망령. 처음 쓰러지면 부활하며 폭발', cost: 10 },
   { id: 'u_dragonknight', emoji: '🐲', name: '용기사', desc: '유닛 · 수호/야수. 앞쪽 광역 브레스 + 보호막', cost: 10 },
   { id: 'u_shadowlord', emoji: '👤', name: '그림자 군주', desc: '유닛 · 그림자/망령. 분신 2기 소환', cost: 10 },
+  { id: 'u_general', emoji: '🐉', name: '청룡도 장수', desc: '유닛 · 수호/동방. 광역 베기, 쓰러뜨릴 때마다 보호막, 체력 절반에서 분노', cost: 10 },
   { id: 'a_smite', emoji: '🌩️', name: '증강체: 천벌', desc: '10번째 공격마다 낙뢰. 광란과 공명', cost: 8 },
   { id: 'a_timewarp', emoji: '⏳', name: '증강체: 시간 정지', desc: '전투 시작 3.5초간 모든 적 정지', cost: 12 },
   { id: 'a_splitsoul', emoji: '🌗', name: '증강체: 영혼 분열', desc: '가장 강한 아군의 분신이 함께 싸움', cost: 12 },

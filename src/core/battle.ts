@@ -34,6 +34,7 @@ export interface Mod {
   onCrit?(b: Battle, src: Fighter, t: Fighter, dealt: number, info: DmgInfo): void
   onCast?(b: Battle, f: Fighter, info: CastInfo): void
   onDamaged?(b: Battle, f: Fighter, src: Fighter | null, dealt: number): void
+  onDodge?(b: Battle, f: Fighter, src: Fighter): void // f가 기본 공격을 피했을 때
   onLethal?(b: Battle, f: Fighter): boolean // true면 죽음을 막는다
   onAllyDeath?(b: Battle, dead: Fighter, killer: Fighter | null): void
   onDeath?(b: Battle, f: Fighter, killer: Fighter | null): void // own 전용: 이 유닛이 쓰러질 때 (분열·자폭)
@@ -82,6 +83,7 @@ export interface Fighter {
   stunT: number
   slowT: number
   invulnT: number
+  dodge: number // 기본 공격 회피 확률 (상한 75%, 기절 중엔 못 피함)
   buffs: Buff[]
   st: Record<string, number> // 훅이 쓰는 개별 상태
   own: Mod[] // 이 유닛에만 붙는 훅 (아이템, 고유 패시브)
@@ -124,7 +126,7 @@ export function makeFighter(tpl: UnitTpl, star: number, side: Side, x: number, y
     spell: 1, dmgMult: 1, asBonus: 0, lifesteal: 0, overheal: false, skillCrit: false,
     cd: 0.15, retarget: 0, target: null,
     alive: true, summoned: false, gen: 0, boss: !!tpl.boss,
-    stunT: 0, slowT: 0, invulnT: 0, buffs: [], st: { mult }, own: tpl.own?.() ?? [], dealt: 0, taken: 0, glow: '', owner: null,
+    stunT: 0, slowT: 0, invulnT: 0, dodge: tpl.dodge ?? 0, buffs: [], st: { mult }, own: tpl.own?.() ?? [], dealt: 0, taken: 0, glow: '', owner: null,
   }
 }
 
@@ -281,6 +283,13 @@ export class Battle {
 
   damage(src: Fighter | null, t: Fighter, base: number, info: DmgInfo): number {
     if (!t.alive || !(base > 0)) return 0
+    // 회피는 확률이 있을 때만 난수를 뽑는다 (동방 유닛이 없는 전투의 난수 흐름은 그대로)
+    if (src && info.kind === 'atk' && t.dodge > 0 && t.stunT <= 0 && this.r() < Math.min(0.75, t.dodge)) {
+      this.label(t, '회피', '#dad45e')
+      for (const m of this.mods[t.side]) m.onDodge?.(this, t, src)
+      for (const m of t.own) m.onDodge?.(this, t, src)
+      return 0
+    }
     let v = base
     if (src && !info.noMult) {
       v *= this.dmgMul(src)

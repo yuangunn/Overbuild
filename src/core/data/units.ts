@@ -1,7 +1,7 @@
 // 아군 유닛 데이터. 새 유닛 = 이 배열에 객체 하나 추가.
 import type { Battle, Fighter, Mod, Side } from '../battle.ts'
 
-export type TraitId = 'guard' | 'arcane' | 'hunter' | 'shadow' | 'undead' | 'beast'
+export type TraitId = 'guard' | 'arcane' | 'hunter' | 'shadow' | 'undead' | 'beast' | 'east'
 
 export interface UnitTpl {
   id: string
@@ -22,6 +22,7 @@ export interface UnitTpl {
   boss?: boolean
   locked?: boolean // 영구 성장으로 해금
   custom?: boolean // 나만의 영웅 (샌드박스 전용)
+  dodge?: number // 기본 공격 회피 확률
   flee?: number // 싸우지 않고 도망치다 이 초가 지나면 사라진다 (보물 고블린)
   skillName: string
   skillDesc: string
@@ -39,6 +40,25 @@ const summonTpl = (id: string, name: string, emoji: string, traits: TraitId[]): 
 export const SKELETON = summonTpl('skeleton', '해골 졸개', '🦴', ['undead'])
 export const SPIRIT = summonTpl('spirit', '원혼', '👻', ['undead'])
 export const SHADE = summonTpl('shade', '그림자 분신', '👥', ['shadow'])
+// 강시: 때린 대상의 체력을 빨아들이고 둔화 (흑도사의 소환수, 적 강시도 같은 패시브)
+export const jiangshiOwn = (): Mod[] => [{
+  id: 'drain',
+  onHit(b, f, t, dealt, info) {
+    if (info.kind !== 'atk') return
+    t.slowT = Math.max(t.slowT, 1.2)
+    b.heal(f, dealt * 0.6)
+  },
+}]
+export const JIANGSHI: UnitTpl = { ...summonTpl('jiangshi_s', '강시', '🧟', ['undead', 'east']), armor: 30, speed: 1.2, own: jiangshiOwn }
+
+// 선분 (f → x2,y2) 가까이에 있는 적 (관통 화살·일섬)
+function onLine(b: Battle, f: Fighter, x2: number, y2: number, w: number): Fighter[] {
+  const dx = x2 - f.x, dy = y2 - f.y, l2 = dx * dx + dy * dy || 1
+  return b.alive(foe(f)).filter(e => {
+    const t = ((e.x - f.x) * dx + (e.y - f.y) * dy) / l2
+    return t >= 0 && t <= 1 && Math.hypot(f.x + dx * t - e.x, f.y + dy * t - e.y) < w
+  })
+}
 
 export const UNITS: UnitTpl[] = [
   // ── 1골드
@@ -181,7 +201,108 @@ export const UNITS: UnitTpl[] = [
       }
     },
   },
+  // ── 동방: 먼 동쪽 땅에서 건너온 무인들 (특성 하나는 기존 특성이라 판타지 유닛과 섞어 시너지를 맞춘다)
+  {
+    id: 'monk', name: '무승', emoji: '🧘', cost: 1, traits: ['guard', 'east'],
+    hp: 680, atk: 44, as: 0.75, range: 1, armor: 30, mana: 70, startMana: 10,
+    skillName: '금강장', skillDesc: '주변 적에게 공격력 160% 피해, 3초간 방어력 +70.',
+    skill(b, f) {
+      for (const e of b.inRadius(f.x, f.y, 1.4, foe(f))) b.damage(f, e, f.atk * 1.6, { kind: 'skill' })
+      f.buffs.push({ t: 3, armor: 70 })
+      b.emit({ k: 'ring', x: f.x, y: f.y, r: 1.4, color: '#dad45e', style: 'holy' })
+    },
+  },
+  {
+    id: 'archer', name: '명궁', emoji: '🏹', cost: 1, traits: ['hunter', 'east'],
+    hp: 470, atk: 50, as: 0.75, range: 4, armor: 10, mana: 70,
+    skillName: '관통시', skillDesc: '대상 쪽으로 화살을 쏘아 지나는 길의 모든 적에게 공격력 240% 피해.',
+    skill(b, f) {
+      const t = aim(b, f)
+      if (!t) return
+      const d = Math.hypot(t.x - f.x, t.y - f.y) || 1, x2 = f.x + ((t.x - f.x) / d) * 7, y2 = f.y + ((t.y - f.y) / d) * 7
+      b.emit({ k: 'shot', x1: f.x, y1: f.y, x2, y2, color: '#dad45e', style: 'snipe' })
+      for (const e of onLine(b, f, x2, y2, 0.55)) b.damage(f, e, f.atk * 2.4, { kind: 'skill' })
+    },
+  },
+  {
+    id: 'swordsman', name: '삿갓 검객', emoji: '⚔️', cost: 2, traits: ['shadow', 'east'],
+    hp: 600, atk: 62, as: 0.9, range: 1, armor: 20, mana: 60, crit: 0.2,
+    skillName: '일섬', skillDesc: '적 후열까지 단숨에 베고 지나가며 길 위의 모든 적에게 공격력 200% 피해 (치명 가능).',
+    skill(b, f) {
+      const t = b.backline(foe(f))
+      if (!t) return
+      const hit = onLine(b, f, t.x, t.y, 0.6), x1 = f.x, y1 = f.y
+      b.teleport(f, t.x + fwd(f) * 0.6, t.y)
+      b.emit({ k: 'line', x1, y1, x2: f.x, y2: f.y, color: '#ffffff' })
+      for (const e of hit) b.damage(f, e, f.atk * 2, { kind: 'skill', canCrit: true })
+      f.target = t
+      f.retarget = 2
+    },
+  },
+  {
+    id: 'taoist', name: '노도사', emoji: '📜', cost: 2, traits: ['arcane', 'east'],
+    hp: 500, atk: 48, as: 0.7, range: 3, armor: 15, mana: 70,
+    skillName: '봉인 부적', skillDesc: '공격력이 가장 높은 적 (1+★)명에게 부적을 붙여 공격력 150% 피해, 2초 기절.',
+    skill(b, f) {
+      for (const e of b.alive(foe(f)).sort((x, y) => y.atk - x.atk).slice(0, 1 + f.star)) {
+        b.damage(f, e, f.atk * 1.5, { kind: 'skill' })
+        e.stunT = Math.max(e.stunT, 2)
+        b.emit({ k: 'ring', x: e.x, y: e.y, r: 0.6, color: '#dad45e', style: 'holy' })
+      }
+    },
+  },
+  {
+    id: 'jiangshimaster', name: '흑도사', emoji: '🧙', cost: 3, traits: ['undead', 'east'],
+    hp: 640, atk: 58, as: 0.7, range: 3, armor: 15, mana: 85, startMana: 20,
+    skillName: '강시 부르기', skillDesc: '강시 (★)기를 부른다. 강시는 단단하고, 때린 대상의 체력을 빨아들이며 둔화시킨다.',
+    skill(b, f) {
+      for (let i = 0; i < f.star; i++) {
+        b.summon(f.side, JIANGSHI, f.x + fwd(f) * 0.9, f.y + (i - (f.star - 1) / 2) * 0.6, { maxHp: f.maxHp * 0.7, atk: f.atk * 0.6 })
+      }
+      b.emit({ k: 'ring', x: f.x, y: f.y, r: 1, color: '#6daa2c', style: 'spirit' })
+    },
+  },
+  {
+    id: 'monkeyking', name: '원숭이 권사', emoji: '🐒', cost: 3, traits: ['beast', 'east'],
+    hp: 820, atk: 78, as: 0.9, range: 1, armor: 25, mana: 75,
+    skillName: '천변만화', skillDesc: '적 (3+★)명에게 차례로 순간이동하며 공격력 130% 피해 (치명 가능).',
+    skill(b, f) {
+      for (let k = 0; k < 3 + f.star; k++) {
+        b.later(k * 0.22, () => {
+          const es = b.alive(foe(f))
+          if (!f.alive || !es.length) return
+          const t = es[Math.floor(b.r() * es.length)]
+          b.teleport(f, t.x - fwd(f) * 0.6, t.y)
+          f.target = t
+          f.retarget = 1
+          b.damage(f, t, f.atk * 1.3, { kind: 'skill', canCrit: true })
+        })
+      }
+    },
+  },
   // ── 해금 유닛
+  {
+    id: 'general', name: '청룡도 장수', emoji: '🐉', cost: 3, traits: ['guard', 'east'], locked: true,
+    hp: 1250, atk: 85, as: 0.7, range: 1, armor: 45, mana: 100, startMana: 20,
+    skillName: '청룡언월', skillDesc: '청룡도를 크게 휘둘러 주변 적에게 공격력 250% 피해, 쓰러뜨린 적마다 최대 체력 12% 보호막. 체력이 처음 절반 아래로 떨어지면 공격력 +50%.',
+    skill(b, f) {
+      for (const e of b.inRadius(f.x, f.y, 2, foe(f))) {
+        b.damage(f, e, f.atk * 2.5, { kind: 'skill' })
+        if (!e.alive) f.shield += f.maxHp * 0.12
+      }
+      b.emit({ k: 'ring', x: f.x, y: f.y, r: 2, color: '#6daa2c', style: 'blade' })
+      b.emit({ k: 'shake', v: 5 })
+    },
+    own: () => [{
+      id: 'wrath',
+      onDamaged(b, f) {
+        if (f.st.wrath || f.hp >= f.maxHp * 0.5) return
+        f.st.wrath = 1
+        f.dmgMult += 0.5
+        b.label(f, '분노!', '#d34549')
+      },
+    }],
+  },
   {
     id: 'phoenix', name: '불사조', emoji: '🔥', cost: 3, traits: ['arcane', 'undead'], locked: true,
     hp: 700, atk: 70, as: 0.7, range: 3, armor: 20, mana: 90,

@@ -400,12 +400,13 @@ export function equip(s: RunState, idx: number, unitId: number): string | null {
 export interface Syn { id: TraitId; count: number; tier: number; x: number; crest: boolean }
 
 export function synergies(s: RunState): Syn[] {
-  const seen = new Set<string>()
+  const got = new Map<string, Set<TraitId>>()
   const cnt: Partial<Record<TraitId, number>> = {}
   for (const u of boardOf(s)) {
-    if (seen.has(u.tpl)) continue
-    seen.add(u.tpl)
-    for (const t of UNIT[u.tpl].traits) cnt[t] = (cnt[t] ?? 0) + 1
+    const g = got.get(u.tpl) ?? new Set<TraitId>()
+    got.set(u.tpl, g)
+    const ts: TraitId[] = u.items.includes('seal') ? [...UNIT[u.tpl].traits, 'east'] : UNIT[u.tpl].traits
+    for (const t of ts) if (!g.has(t)) { g.add(t); cnt[t] = (cnt[t] ?? 0) + 1 }
   }
   return TRAIT_IDS.map(id => {
     const crest = has(s, 'crest_' + id)

@@ -316,6 +316,33 @@ export const RELICS: ItemDef[] = [
       },
       onHit(b, f, t, dealt, info) { if (info.kind !== 'proc' && t.uid === f.st.duel) b.damage(f, t, dealt * 0.6, { kind: 'proc', noMult: true }) },
     })),
+  // 동방 유물: 사건 '동방에서 온 상인'에서도 나온다
+  R('gourd', '취권 호리병', '🍶', '4초마다 술을 들이켜 체력 10%를 회복하고 3초간 공격 속도 +40%.',
+    f => own(f, {
+      id: 'gourd',
+      onBegin(b, f) {
+        const sip = () => {
+          if (!f.alive || b.done) return
+          b.heal(f, f.maxHp * 0.1)
+          f.buffs.push({ t: 3, as: 0.4 })
+          b.later(4, sip)
+        }
+        b.later(4, sip)
+      },
+    })),
+  R('seal', '전국 옥새', '💠', '이 유닛이 동방 특성을 얻는다 (시너지 인원에 센다).', f => { if (!f.traits.includes('east')) f.traits.push('east') }),
+  R('talisman', '봉인 부적', '📜', '전투가 시작되면 공격력이 가장 높은 적을 3초 동안 기절시킨다 (보스는 1.5초).',
+    f => own(f, {
+      id: 'talisman',
+      onBegin(b, f) {
+        b.later(0.1, () => {
+          const t = b.alive(foeSide(f)).sort((x, y) => y.atk - x.atk)[0]
+          if (!f.alive || !t) return
+          t.stunT = Math.max(t.stunT, t.boss ? 1.5 : 3)
+          b.label(t, '봉인!', '#dad45e')
+        })
+      },
+    })),
 ]
 
 export const HIDDEN: ItemDef[] = [...RELICS, ...RADIANTS]
