@@ -118,16 +118,19 @@ export const TRAITS: Record<TraitId, TraitDef> = {
   },
   east: {
     id: 'east', name: '동방', emoji: '☯️', color: '#dad45e', tiers: [2, 4],
-    desc: ['동방 유닛 회피 20%. 기본 공격을 피하면 공격자에게 공격력 80% 반격.', '동방 유닛 회피 35%, 반격 160% (치명 가능), 피할 때마다 마나 +15. 다른 아군도 회피 10%.'],
+    desc: ['동방 유닛 회피 25%. 기본 공격을 피하면 공격자에게 공격력 120% 반격, 동방 유닛 스킬 피해 +15%.', '동방 유닛 회피 40%, 반격 220% (치명 가능), 피할 때마다 마나 +20, 스킬 피해 +35%. 다른 아군도 회피 15%.'],
     mod: (tier, x) => ({
       id: 'east',
       onStart(b, side) {
-        for (const f of b.alive(side)) f.dodge += (is(f, 'east') ? (tier > 1 ? 0.35 : 0.2) : tier > 1 ? 0.1 : 0) * x
+        for (const f of b.alive(side)) {
+          f.dodge += (is(f, 'east') ? (tier > 1 ? 0.4 : 0.25) : tier > 1 ? 0.15 : 0) * x
+          if (is(f, 'east')) f.spell += (tier > 1 ? 0.35 : 0.15) * x
+        }
       },
       onDodge(b, f, src) {
         if (!is(f, 'east') || !src.alive) return
-        b.damage(f, src, f.atk * (tier > 1 ? 1.6 : 0.8) * x, { kind: 'proc', canCrit: tier > 1 })
-        if (tier > 1 && f.maxMana > 0) f.mana += 15 * f.manaGain
+        b.damage(f, src, f.atk * (tier > 1 ? 2.2 : 1.2) * x, { kind: 'proc', canCrit: tier > 1 })
+        if (tier > 1 && f.maxMana > 0) f.mana += 20 * f.manaGain
       },
     }),
   },

@@ -1,7 +1,7 @@
 // 증강체와 공명. 증강체 = 전투 훅(mod) 또는 획득 즉시 효과(onPick).
 // 공명 = 증강체 두 개를 함께 가질 때 켜지는 숨은 효과. 각 증강체 훅이 has('res_*')로 분기한다.
 import type { Battle, Fighter, FxStyle, Mod, Side } from '../battle.ts'
-import { SPIRIT, type TraitId } from './units.ts'
+import { SPIRIT, UNITS, type TraitId } from './units.ts'
 import { TRAITS, TRAIT_IDS } from './traits.ts'
 
 export interface PickCtx {
@@ -9,6 +9,8 @@ export interface PickCtx {
   addUnit(tpl: string, star: number): void
   addItem(): void
   bestUnitTpl(): string | null
+  rand(): number
+  refreshShop(): void
 }
 
 export interface AugDef {
@@ -320,6 +322,20 @@ export const AUGMENTS: AugDef[] = [
         b.banner(`${best.name} 분열!`, '#d1b3ff')
       },
     }),
+  },
+  // ── 테마의 문: 고른 원정부터 그 테마 유닛이 상점·보상에 나온다
+  {
+    id: 'gate_east', name: '동방의 부름', emoji: '☯️', rarity: 3, fit: ['east'],
+    desc: '동방 유닛이 상점에 나오기 시작하고, 상점 첫 칸은 늘 동방 유닛이다. 동방 특성 개수 +1, 동방 유닛 체력·공격력 +50%. 지금 동방 유닛 ★2 하나가 합류하고 상점을 새로 채운다.',
+    mod: () => ({
+      id: 'gate_east',
+      onStart(b, side) { for (const f of b.alive(side)) if (f.traits.includes('east')) { f.maxHp *= 1.5; f.atk *= 1.5 } },
+    }),
+    onPick(c) {
+      const pool = UNITS.filter(u => u.theme === 'east' && !u.locked && u.cost <= 2)
+      c.addUnit(pool[Math.floor(c.rand() * pool.length)].id, 2)
+      c.refreshShop()
+    },
   },
   // ── 특성 문장: 해당 특성 +1, 효과 2배 (run.synergies가 처리)
   ...TRAIT_IDS.map((t): AugDef => ({

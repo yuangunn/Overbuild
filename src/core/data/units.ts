@@ -23,6 +23,7 @@ export interface UnitTpl {
   locked?: boolean // 영구 성장으로 해금
   custom?: boolean // 나만의 영웅 (샌드박스 전용)
   dodge?: number // 기본 공격 회피 확률
+  theme?: 'east' // 이 테마의 프리즘 증강체(gate_테마)를 골라야 상점·보상에 나온다
   flee?: number // 싸우지 않고 도망치다 이 초가 지나면 사라진다 (보물 고블린)
   skillName: string
   skillDesc: string
@@ -203,7 +204,7 @@ export const UNITS: UnitTpl[] = [
   },
   // ── 동방: 먼 동쪽 땅에서 건너온 무인들 (특성 하나는 기존 특성이라 판타지 유닛과 섞어 시너지를 맞춘다)
   {
-    id: 'monk', name: '무승', emoji: '🧘', cost: 1, traits: ['guard', 'east'],
+    id: 'monk', name: '무승', emoji: '🧘', cost: 1, traits: ['guard', 'east'], theme: 'east',
     hp: 680, atk: 44, as: 0.75, range: 1, armor: 30, mana: 70, startMana: 10,
     skillName: '금강장', skillDesc: '주변 적에게 공격력 160% 피해, 3초간 방어력 +70.',
     skill(b, f) {
@@ -213,7 +214,7 @@ export const UNITS: UnitTpl[] = [
     },
   },
   {
-    id: 'archer', name: '명궁', emoji: '🏹', cost: 1, traits: ['hunter', 'east'],
+    id: 'archer', name: '명궁', emoji: '🏹', cost: 1, traits: ['hunter', 'east'], theme: 'east',
     hp: 470, atk: 50, as: 0.75, range: 4, armor: 10, mana: 70,
     skillName: '관통시', skillDesc: '대상 쪽으로 화살을 쏘아 지나는 길의 모든 적에게 공격력 240% 피해.',
     skill(b, f) {
@@ -225,7 +226,7 @@ export const UNITS: UnitTpl[] = [
     },
   },
   {
-    id: 'swordsman', name: '삿갓 검객', emoji: '⚔️', cost: 2, traits: ['shadow', 'east'],
+    id: 'swordsman', name: '삿갓 검객', emoji: '⚔️', cost: 2, traits: ['shadow', 'east'], theme: 'east',
     hp: 600, atk: 62, as: 0.9, range: 1, armor: 20, mana: 60, crit: 0.2,
     skillName: '일섬', skillDesc: '적 후열까지 단숨에 베고 지나가며 길 위의 모든 적에게 공격력 200% 피해 (치명 가능).',
     skill(b, f) {
@@ -240,7 +241,7 @@ export const UNITS: UnitTpl[] = [
     },
   },
   {
-    id: 'taoist', name: '노도사', emoji: '📜', cost: 2, traits: ['arcane', 'east'],
+    id: 'taoist', name: '노도사', emoji: '📜', cost: 2, traits: ['arcane', 'east'], theme: 'east',
     hp: 500, atk: 48, as: 0.7, range: 3, armor: 15, mana: 70,
     skillName: '봉인 부적', skillDesc: '공격력이 가장 높은 적 (1+★)명에게 부적을 붙여 공격력 150% 피해, 2초 기절.',
     skill(b, f) {
@@ -252,7 +253,7 @@ export const UNITS: UnitTpl[] = [
     },
   },
   {
-    id: 'jiangshimaster', name: '흑도사', emoji: '🧙', cost: 3, traits: ['undead', 'east'],
+    id: 'jiangshimaster', name: '흑도사', emoji: '🧙', cost: 3, traits: ['undead', 'east'], theme: 'east',
     hp: 640, atk: 58, as: 0.7, range: 3, armor: 15, mana: 85, startMana: 20,
     skillName: '강시 부르기', skillDesc: '강시 (★)기를 부른다. 강시는 단단하고, 때린 대상의 체력을 빨아들이며 둔화시킨다.',
     skill(b, f) {
@@ -263,7 +264,7 @@ export const UNITS: UnitTpl[] = [
     },
   },
   {
-    id: 'monkeyking', name: '원숭이 권사', emoji: '🐒', cost: 3, traits: ['beast', 'east'],
+    id: 'monkeyking', name: '원숭이 권사', emoji: '🐒', cost: 3, traits: ['beast', 'east'], theme: 'east',
     hp: 820, atk: 78, as: 0.9, range: 1, armor: 25, mana: 75,
     skillName: '천변만화', skillDesc: '적 (3+★)명에게 차례로 순간이동하며 공격력 130% 피해 (치명 가능).',
     skill(b, f) {
@@ -282,7 +283,7 @@ export const UNITS: UnitTpl[] = [
   },
   // ── 해금 유닛
   {
-    id: 'general', name: '청룡도 장수', emoji: '🐉', cost: 3, traits: ['guard', 'east'], locked: true,
+    id: 'general', name: '청룡도 장수', emoji: '🐉', cost: 3, traits: ['guard', 'east'], theme: 'east', locked: true,
     hp: 1250, atk: 85, as: 0.7, range: 1, armor: 45, mana: 100, startMana: 20,
     skillName: '청룡언월', skillDesc: '청룡도를 크게 휘둘러 주변 적에게 공격력 250% 피해, 쓰러뜨린 적마다 최대 체력 12% 보호막. 체력이 처음 절반 아래로 떨어지면 공격력 +50%.',
     skill(b, f) {

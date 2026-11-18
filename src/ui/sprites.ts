@@ -151,7 +151,7 @@ export const ICON: Record<string, [string, number, number]> = {
   // 유물 (찬란한 아이템은 원래 조합 아이템 그림에 빛을 두른다)
   lantern: ['Music', 1, 4], cloak: ['Armor', 7, 7], gloves: ['Glove', 3, 0], prism: ['Money', 0, 2], cursed: ['LongWep', 5, 1], angel: ['Scroll', 2, 5],
   scope: ['Tool', 3, 0], bigpotion: ['Potion', 4, 2], bloodvial: ['Potion', 7, 4], spring: ['Tool', 2, 2], crown: ['Hat', 1, 3], trident: ['LongWep', 6, 0],
-  gourd: ['Potion', 6, 3], seal: ['Money', 5, 4], talisman: ['Scroll', 2, 5],
+  gate_east: ['Scroll', 4, 1], gourd: ['Potion', 6, 3], seal: ['Money', 5, 4], talisman: ['Scroll', 2, 5],
   // 특성 (문장 증강체도 같은 아이콘)
   ...TRAIT_ICON, ...Object.fromEntries(Object.entries(TRAIT_ICON).map(([k, v]) => ['crest_' + k, v])),
   // 증강체

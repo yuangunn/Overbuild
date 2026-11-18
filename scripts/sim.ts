@@ -114,6 +114,7 @@ console.log('\n[1] 메커니즘')
   const team: Spec[] = [['shieldbearer', 2], ['cutthroat', 2, ['dice']], ['ranger', 2], ['frostwitch', 2], ['necromancer', 2], ['sniper', 2]]
   const statOnly: Record<string, (f: Fighter) => boolean> = {
     vamp: f => f.lifesteal >= 0.25, giant: f => f.maxHp > UNIT[f.tpl.id].hp * 1.8 * 1.9, overload: f => f.skillCrit,
+    gate_east: () => true, // 동방 유닛에만 붙는 능력치라 [1l]에서 따로 확인
   }
   const silent: string[] = []
   for (const a of AUGMENTS) {
@@ -537,8 +538,8 @@ console.log('\n[1l] 동방 유닛·요괴')
   const two = syn([['monk', 1], ['archer', 1], ['bear', 1]])
   const four = syn([['monk', 1], ['archer', 1], ['swordsman', 1], ['taoist', 1], ['bear', 1]])
   const dg = (fs: Fighter[], id: string) => fs.find(f => f.tpl.id === id)!.dodge
-  ok(dg(two, 'monk') === 0.2 && dg(two, 'bear') === 0 && Math.abs(dg(four, 'monk') - 0.35) < 1e-9 && Math.abs(dg(four, 'bear') - 0.1) < 1e-9 && dg(syn([['monk', 1], ['bear', 1]]), 'monk') === 0,
-    '동방 2명: 동방 유닛 회피 20% / 4명: 35%, 다른 아군도 10% / 1명: 없음')
+  ok(dg(two, 'monk') === 0.25 && dg(two, 'bear') === 0 && Math.abs(dg(four, 'monk') - 0.4) < 1e-9 && Math.abs(dg(four, 'bear') - 0.15) < 1e-9 && dg(syn([['monk', 1], ['bear', 1]]), 'monk') === 0,
+    '동방 2명: 동방 유닛 회피 25% / 4명: 40%, 다른 아군도 15% / 1명: 없음')
 
   const sp = R.buildBattle(vs(setup(8, [['monk', 2], ['archer', 2], ['bear', 2]]), 'brute', 3))
   let dodged = 0, countered = 0
@@ -550,7 +551,7 @@ console.log('\n[1l] 동방 유닛·요괴')
   const sealed = setup(8, [['bear', 1, ['seal']], ['monk', 1]])
   const sy = R.synergies(sealed).find(x => x.id === 'east')
   const sb = R.buildBattle(vs(sealed, 'dummy', 1))
-  ok(sy?.count === 2 && sy.tier === 1 && of(sb, 'bear').traits.includes('east') && of(sb, 'bear').dodge === 0.2, '전국 옥새: 동방 특성을 얻어 시너지 인원에 들어가고 회피도 받는다')
+  ok(sy?.count === 2 && sy.tier === 1 && of(sb, 'bear').traits.includes('east') && Math.abs(of(sb, 'bear').dodge - 0.4) < 1e-9, '전국 옥새: 동방 특성을 얻어 시너지 인원에 들어가고, 자체 회피 15% + 동방 회피 25%')
   const dup = setup(8, [['monk', 1, ['seal']], ['monk', 1], ['archer', 1]])
   ok(R.synergies(dup).find(x => x.id === 'east')?.count === 2, '같은 유닛 둘은 옥새가 있어도 특성마다 한 번만 센다')
 
@@ -571,16 +572,31 @@ console.log('\n[1l] 동방 유닛·요괴')
   gmb.damage(null, gf, 1, { kind: 'proc' })
   ok(gm.wave.kind === 'elite' && gm.wave.spawns[0].tpl === 'gumiho' && gf.dodge === 0.3 && gmb.fighters.filter(f => f.tpl.id === 'foxclone').length === 2, '구미호: 10R 정예 후보, 회피 30%, 체력 60% 아래에서 꼬리 분신 둘')
 
-  const locked = R.newRun({ unlocked: [] }, 3), open = R.newRun({ unlocked: ['u_general'] }, 3)
-  ok(!R.shopPool(locked).some(t => t.id === 'general') && R.shopPool(open).some(t => t.id === 'general') && UNLOCKS.some(u => u.id === 'u_general'), '청룡도 장수: 별조각으로 해금해야 상점에 나온다')
+  const plain = R.newRun({ unlocked: ['u_general'] }, 3), gated = R.newRun({ unlocked: [] }, 3), both = R.newRun({ unlocked: ['u_general'] }, 3)
+  gated.augments = ['gate_east']; both.augments = ['gate_east']
+  ok(!R.shopPool(plain).some(t => t.theme === 'east') && R.shopPool(gated).some(t => t.id === 'monk') && !R.shopPool(gated).some(t => t.id === 'general') && R.shopPool(both).some(t => t.id === 'general') && UNLOCKS.some(u => u.id === 'u_general'),
+    '동방 유닛은 동방의 부름을 고른 원정에만 나오고, 청룡도 장수는 별조각 해금도 필요')
+  let east2 = true
+  for (let k = 0; k < 30; k++) { R.rollShop(gated); east2 &&= UNIT[gated.shop[0]!].theme === 'east' }
+  let none = true
+  for (let k = 0; k < 60; k++) { R.rollShop(plain); none &&= plain.shop.every(id => !UNIT[id!].theme) }
+  ok(east2 && none, '동방의 부름: 상점 첫 칸은 늘 동방 유닛 / 없으면 동방 유닛이 안 나온다')
+  const gp = R.newRun({ unlocked: [] }, 9)
+  Object.assign(gp, { queue: ['augment'], augChoices: ['gate_east', 'echo', 'vamp'], units: [] })
+  R.pickAug(gp, 'gate_east')
+  ok(gp.units.length === 1 && UNIT[gp.units[0].tpl].theme === 'east' && gp.units[0].star === 2 && UNIT[gp.shop[0]!].theme === 'east', '고르면 동방 유닛 ★2가 합류하고 상점이 새로 채워진다')
+  const hp = (augs: string[]) => of(R.buildBattle(vs(setup(8, [['monk', 1], ['bear', 1]], augs), 'dummy', 1)), 'monk').maxHp
+  const bear = (augs: string[]) => of(R.buildBattle(vs(setup(8, [['monk', 1], ['bear', 1]], augs), 'dummy', 1)), 'bear').maxHp
+  ok(Math.abs(hp(['gate_east']) / hp([]) - 1.5) < 1e-9 && bear(['gate_east']) === bear([]) && R.synergies(setup(8, [['monk', 1]], ['gate_east'])).find(x => x.id === 'east')?.tier === 1, '동방의 부름: 동방 특성 +1 (무승 하나로 2명), 동방 유닛 체력·공격력 +50%, 다른 유닛은 그대로')
 
   const ev = R.newRun({ unlocked: [] }, 7)
-  Object.assign(ev, { queue: ['room'], room: { kind: 'event', event: 'eastern' }, gold: 20, units: [] })
+  Object.assign(ev, { queue: ['room'], room: { kind: 'event', event: 'eastern' }, gold: 30, lives: 3, units: [] })
   R.eventPick(ev, 0)
-  ok(ev.gold === 14 && ev.units.length === 1 && UNIT[ev.units[0].tpl].traits.includes('east') && ev.units[0].star === 2, '동방에서 온 상인: 6골드 → 동방 유닛 ★2')
+  ok(ev.gold === 20 && ev.augments.includes('gate_east') && ev.units.length === 1 && UNIT[ev.units[0].tpl].theme === 'east' && ev.units[0].star === 2 && R.eventCan(ev, 0) === '이미 동방의 부름이 있습니다',
+    '동방에서 온 상인: 10골드 → 동방의 부름 (동방 유닛 ★2 합류), 두 번은 못 얻음')
   Object.assign(ev, { queue: ['room'] })
   R.eventPick(ev, 1)
-  ok(ev.gold === 2 && ['gourd', 'seal', 'talisman'].some(id => ev.items.includes(id)), '12골드 → 동방 유물 하나')
+  ok(ev.gold === 8 && ['gourd', 'seal', 'talisman'].some(id => ev.items.includes(id)), '12골드 → 동방 유물 하나')
 }
 
 

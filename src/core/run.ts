@@ -190,7 +190,8 @@ export const evoOf = (u: Pick<OwnedUnit, 'tpl' | 'star' | 'items'>): EvoDef | un
 }
 const evoNote = (s: RunState, u: OwnedUnit, was: boolean) => { const e = evoOf(u); if (e && !was) s.notes.push(`진화! ${UNIT[u.tpl].name} — ${e.name}`) }
 export const sellValue = (u: OwnedUnit) => UNIT[u.tpl].cost * 3 ** (u.star - 1)
-export const shopPool = (s: RunState) => UNITS.filter(t => !t.locked || s.unlocked.includes('u_' + t.id))
+// 테마 유닛(동방)은 그 테마의 프리즘 증강체를 고른 원정에서만 나온다 → 평소 상점 유닛 수(★ 모으는 속도)는 그대로
+export const shopPool = (s: RunState) => UNITS.filter(t => (!t.locked || s.unlocked.includes('u_' + t.id)) && (!t.theme || has(s, 'gate_' + t.theme)))
 export const activeRes = (s: RunState): ResDef[] => RESONANCES.filter(r => r.pair.every(p => has(s, p)))
 
 // 칸 번호 → 좌표. 플레이어 col 0 = 후열(왼쪽), 적 col 0 = 전열.
@@ -274,10 +275,13 @@ export function buyXp(s: RunState): string | null {
 export function rollShop(s: RunState, only?: (t: UnitTpl) => boolean) {
   const odds = ODDS[levelOf(s.xp).lv - 1]
   const pool = shopPool(s).filter(t => !only || only(t))
-  s.shop = Array.from({ length: s.shopSize }, () => {
+  // 동방의 부름: 첫 칸은 동방 유닛 (가격 확률은 같게). 두 칸이면 다른 특성을 노리는 상점이 셋으로 줄어 손해였다
+  const east = has(s, 'gate_east') ? pool.filter(t => t.theme === 'east') : []
+  s.shop = Array.from({ length: s.shopSize }, (_, i) => {
     const tier = pickW(s.rng, [1, 2, 3], t => odds[t - 1])
-    const at = pool.filter(x => x.cost === tier)
-    return pick(s.rng, at.length ? at : pool).id
+    const from = i < 1 && east.length ? east : pool
+    const at = from.filter(x => x.cost === tier)
+    return pick(s.rng, at.length ? at : from).id
   })
 }
 
@@ -410,7 +414,7 @@ export function synergies(s: RunState): Syn[] {
   }
   return TRAIT_IDS.map(id => {
     const crest = has(s, 'crest_' + id)
-    const count = (cnt[id] ?? 0) + (crest ? 1 : 0)
+    const count = (cnt[id] ?? 0) + (crest ? 1 : 0) + (id === 'east' && has(s, 'gate_east') ? 1 : 0)
     return { id, count, tier: TRAITS[id].tiers.filter(n => count >= n).length, x: crest ? 2 : 1, crest }
   }).filter(x => x.count > 0).sort((a, b) => b.tier - a.tier || b.count - a.count)
 }
@@ -604,6 +608,7 @@ const evCtx = (s: RunState): EvCtx => ({
   addItem: id => { const it = id === 'combo' ? pick(s.rng, COMBOS) : id ? ITEM[id] : pick(s.rng, ITEMS); s.items.push(it.id); return it.name },
   augment: rarity => { s.augOnly = rarity; rollAugs(s); if (s.augChoices.length) s.queue.splice(1, 0, 'augment'); else s.augOnly = undefined },
   forge: kind => { if (forge(s, kind)) s.queue.splice(1, 0, 'reward') },
+  grantAug: id => { s.augments.push(id); AUG[id].onPick?.(ctx(s)) },
   topTpl: cost => { const top = topTraits(s); const pool = shopPool(s).filter(t => !cost || t.cost === cost); return (pool.find(t => t.traits.some(x => top[0] === x)) ?? pick(s.rng, pool)).id },
   best: () => [...boardOf(s)].sort((a, b) => UNIT[b.tpl].cost * 3 ** b.star - UNIT[a.tpl].cost * 3 ** a.star)[0],
   rand: () => rand(s.rng),
@@ -710,6 +715,8 @@ const ctx = (s: RunState): PickCtx => ({
   addUnit: (t, star) => addUnit(s, t, star),
   addItem: () => { s.items.push(pick(s.rng, ITEMS).id) },
   bestUnitTpl: () => [...s.units].sort((a, b) => UNIT[b.tpl].cost - UNIT[a.tpl].cost || b.star - a.star)[0]?.tpl ?? null,
+  rand: () => rand(s.rng),
+  refreshShop: () => rollShop(s),
 })
 
 // 반환: 이번에 새로 켜진 공명 id

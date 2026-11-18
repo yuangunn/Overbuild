@@ -214,7 +214,7 @@ export const ENEMIES: Record<string, UnitTpl> = {
     },
   }),
   gumiho: E({
-    id: 'gumiho', name: '구미호', emoji: '🦊', size: 0.95, hp: 2600, atk: 84, as: 0.85, range: 2, armor: 25, mana: 80, dodge: 0.3,
+    id: 'gumiho', name: '구미호', emoji: '🦊', size: 0.95, hp: 2400, atk: 80, as: 0.85, range: 2, armor: 25, mana: 80, dodge: 0.3,
     skillName: '여우불', skillDesc: '무작위 적 넷에게 여우불을 날려 공격력 150% 피해. 기본 공격 30%를 피하고, 체력 60%·30%에서 꼬리 분신 둘을 부른다.',
     skill(b, f) {
       const es = b.alive(foe(f))

@@ -3,7 +3,6 @@
 import type { RunState } from '../run.ts'
 import { AUG } from './augments.ts'
 import { isBase } from './items.ts'
-import { UNITS } from './units.ts'
 
 export interface EvCtx {
   s: RunState
@@ -11,6 +10,7 @@ export interface EvCtx {
   addItem(id?: string): string // 없으면 무작위 기본 아이템
   augment(rarity?: number): void // 증강체 선택을 하나 더 연다 (등급 고정 가능)
   forge(kind: 'relic' | 'radiant'): void // 유물 모루·찬란한 무기고를 연다
+  grantAug(id: string): void // 증강체를 고르지 않고 바로 얻는다 (획득 효과 포함)
   topTpl(cost?: number): string // 주력 특성에 맞는 유닛
   best(): RunState['units'][number] | undefined // 가장 강한 배치 유닛
   rand(): number
@@ -105,13 +105,9 @@ export const EVENTS: EventDef[] = [
   {
     id: 'eastern', name: '동방에서 온 상인', text: '낯선 옷차림의 상인이 비단 보따리를 푼다. "먼 동쪽 땅의 물건이오. 함께 건너온 무인도 있소."',
     choices: [
-      { label: '6골드로 무인을 들인다', desc: '동방 유닛 ★2 하나 (1~2골드 유닛 중 무작위).', can: gold(6), apply: c => {
-        const pool = UNITS.filter(u => u.traits.includes('east') && u.cost <= 2 && !u.locked)
-        const t = pool[Math.floor(c.rand() * pool.length)]
-        c.s.gold -= 6
-        c.addUnit(t.id, 2)
-        return `${t.name}이(가) 합류했다.`
-      } },
+      { label: '10골드로 길을 묻는다', desc: '프리즘 증강체 동방의 부름을 얻는다: 동방 유닛이 상점에 나오고(첫 칸 고정), 동방 특성 +1, 체력·공격력 +50%, 지금 동방 유닛 ★2 하나가 합류.',
+        can: c => (c.s.augments.includes('gate_east') ? '이미 동방의 부름이 있습니다' : gold(10)(c)),
+        apply: c => { c.s.gold -= 10; c.grantAug('gate_east'); return '상인이 동쪽으로 가는 길을 일러 주었다. 동방의 부름!' } },
       { label: '12골드로 보물을 산다', desc: '동방 유물 하나 (취권 호리병·전국 옥새·봉인 부적 중 무작위). 유물은 다른 아이템과 합쳐지지 않는다.', can: gold(12), apply: c => {
         const id = EAST_RELICS[Math.floor(c.rand() * EAST_RELICS.length)]
         c.s.gold -= 12

@@ -330,7 +330,7 @@ export const RELICS: ItemDef[] = [
         b.later(4, sip)
       },
     })),
-  R('seal', '전국 옥새', '💠', '이 유닛이 동방 특성을 얻는다 (시너지 인원에 센다).', f => { if (!f.traits.includes('east')) f.traits.push('east') }),
+  R('seal', '전국 옥새', '💠', '이 유닛이 동방 특성을 얻고 (시너지 인원에 센다) 기본 공격 15%를 피한다.', f => { if (!f.traits.includes('east')) f.traits.push('east'); f.dodge += 0.15 }),
   R('talisman', '봉인 부적', '📜', '전투가 시작되면 공격력이 가장 높은 적을 3초 동안 기절시킨다 (보스는 1.5초).',
     f => own(f, {
       id: 'talisman',
